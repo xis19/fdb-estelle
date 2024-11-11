@@ -22,7 +22,7 @@ from .base import (
     RecordBase,
     TaskBase,
 )
-from ._sql_base import agent_table, context_table, ensemble_table, metadata, task_table
+from .sql_base import agent_table, context_table, ensemble_table, metadata, task_table
 from ..agent import Agent as AgentItem
 from ..config import config
 from ..context import Context as ContextItem
