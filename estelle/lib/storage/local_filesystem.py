@@ -17,7 +17,7 @@ class Uploader(UploaderBase):
 
         self._work_directory = work_directory
         if not self._work_directory.exists():
-            os.mkdirs(self._work_directory)
+            os.makedirs(self._work_directory)
 
         self._writer: Optional[io.BufferedWriter] = None
         self._filename: pathlib.Path = self._work_directory.joinpath(context.identity)
@@ -27,10 +27,14 @@ class Uploader(UploaderBase):
         logger.info(f"Open {self._filename} for writing")
 
     def _success(self):
+        assert self._writer is not None
+
         self._writer.close()
         logger.info(f"Close {self._filename} for writing")
 
     def _upload_part(self, part: bytes):
+        assert self._writer is not None
+
         self._writer.write(part)
 
 
@@ -40,7 +44,7 @@ class Downloader(DownloaderBase):
 
         self._work_directory = work_directory
         if not self._work_directory.exists():
-            os.mkdirs(self._work_directory)
+            os.makedirs(self._work_directory)
 
         self._reader: Optional[io.BufferedReader] = None
         self._filename = self._work_directory.joinpath(context.identity)
@@ -50,8 +54,12 @@ class Downloader(DownloaderBase):
         logger.info(f"Open {self._filename} for writing")
 
     def _success(self):
+        assert self._reader is not None
+
         self._reader.close()
         logger.info(f"Close {self._filename} for writing")
 
     def _download_part(self, buffer_size: int) -> bytes:
+        assert self._reader is not None
+
         return self._reader.read(buffer_size)

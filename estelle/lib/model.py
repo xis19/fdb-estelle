@@ -29,10 +29,11 @@ def create_test_ensemble(owner: str, runs: int, fail_fast: int, fail_rate: float
         tag="MockTestCorrectness",
     )
 
-    checksum = get_storage().upload(context, io.BytesIO(correctness_tar_gz))
-    context.checksum = checksum
+    result = get_storage().upload(context, io.BytesIO(correctness_tar_gz))
+    context.checksum = result.checksum
+    assert context.size == result.total_bytes
     record.context.insert(context)
-    logger.debug(f"Uploaded correctness.tar.gz with checksum {checksum}")
+    logger.debug(f"Uploaded correctness.tar.gz with checksum {result.checksum}")
 
     ensemble = Ensemble.new(
         owner=owner,
@@ -65,8 +66,9 @@ def create_ensemble(
     context = Context.new(owner=user, size=package_size, checksum=None, tag=tag)
     storage = get_storage()
     with open(package_path, "rb") as stream:
-        checksum = storage.upload(context, stream)
-    context.checksum = checksum
+        result = storage.upload(context, stream)
+    context.checksum = result.checksum
+    assert package_size == result.total_bytes
     record.context.insert(context)
 
     ensemble = Ensemble.new(

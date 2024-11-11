@@ -17,6 +17,7 @@ class Task:
     state: TaskState
     args: Optional[str]
     return_value: Optional[int]
+    execution_context_identity: Optional[str]
 
     @staticmethod
     def new(ensemble_identity: str, args: Optional[str] = None):
@@ -28,4 +29,5 @@ class Task:
             state=TaskState.RUNNING,
             args=args,
             return_value=None,
+            execution_context_identity=None,
         )

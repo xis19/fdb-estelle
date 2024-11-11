@@ -1,4 +1,5 @@
 import abc
+import dataclasses
 import io
 
 from typing import Callable, Optional, Type
@@ -91,9 +92,15 @@ class DownloaderBase(PartOpsBase):
     def _download_part(self, buffer_size: int) -> bytes:
         raise NotImplementedError()
 
-    def _failure(self, ex: Exception):
+    def _failure(self, ex: BaseException):
         logger.exception(f"Download failed with exception {ex.__class__}")
         raise ex
+
+
+@dataclasses.dataclass
+class IOResult:
+    checksum: str
+    total_bytes: int
 
 
 class Storage:
@@ -118,35 +125,39 @@ class Storage:
         context: Context,
         reader: io.BufferedReader,
         buffer_size: Optional[int] = None,
-    ) -> str:
+    ) -> IOResult:
         """Write the BLOB from the reader"""
         buffer_size = buffer_size or config.storage.read_buffer_size
         checksum = Checksum()
 
+        total_bytes = 0
         with self._get_uploader(context) as upload_part:
             byte_data = reader.read(buffer_size)
             while len(byte_data) != 0:
+                total_bytes += len(byte_data)
                 upload_part(byte_data)
                 checksum.update(byte_data)
                 byte_data = reader.read(buffer_size)
 
-        return checksum.hexdigest
+        return IOResult(checksum=checksum.hexdigest, total_bytes=total_bytes)
 
     def download(
         self,
         context: Context,
         writer: io.BufferedWriter,
         buffer_size: Optional[int] = None,
-    ) -> str:
+    ) -> IOResult:
         """Read the BLOB by the identify into the writer"""
         buffer_size = buffer_size or config.storage.write_buffer_size
         checksum = Checksum()
 
+        total_bytes = 0
         with self._get_downloader(context) as download_part:
             byte_data = download_part(buffer_size)
             while len(byte_data) != 0:
+                total_bytes += len(byte_data)
                 writer.write(byte_data)
                 checksum.update(byte_data)
                 byte_data = download_part(buffer_size)
 
-        return checksum.hexdigest
+        return IOResult(checksum=checksum.hexdigest, total_bytes=total_bytes)

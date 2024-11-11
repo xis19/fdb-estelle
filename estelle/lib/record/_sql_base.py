@@ -72,6 +72,7 @@ task_table = Table(
     Column("state", Enum(TaskState), nullable=False),
     Column("args", String, nullable=True),
     Column("return_value", Integer, nullable=True),
+    Column("execution_context_identity", String, nullable=True),
 )
 _mapper_registry.map_imperatively(Task, task_table)
 
