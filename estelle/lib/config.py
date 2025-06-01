@@ -4,7 +4,6 @@ import pathlib
 from typing import Literal, Optional
 
 import platformdirs
-import platformdirs.unix
 import serde
 import serde.toml
 
@@ -18,7 +17,7 @@ _CONFIG_PATH: pathlib.Path = pathlib.Path(_CONFIG_DIR).joinpath(_CONFIG_FILE_NAM
 @dataclasses.dataclass
 class EnsembleConfig:
     default_timeout: int = 5400
-    """ Seconds a ensemble should take """
+    """ Maximum seconds a ensemble should take """
 
     default_tasks: int = 100000
     """ Number of runs of the test """
@@ -30,11 +29,11 @@ class EnsembleConfig:
 @serde.serde
 @dataclasses.dataclass
 class RecordConfig:
-    backend_type: Literal["sql"] = "sql"
+    backend_type: Literal["sql", "foundationdb"] = "foundationdb"
     """Database backend"""
 
     sql_connect_string: Optional[str] = "sqlite:///estelle.sqlite3"
-    cluster_file_path: Optional[str] = None
+    fdb_cluster_file_path: Optional[str] = ""
 
 
 @serde.serde
@@ -43,12 +42,17 @@ class StorageConfig:
     backend_type: Literal["local_filesystem"] = "local_filesystem"
     """Object storage backend"""
 
-    read_buffer_size: Optional[int] = 1024 * 1024
-    write_buffer_size: Optional[int] = 1024 * 1024
-    s3_bucket: Optional[str] = None
+    read_buffer_size: Optional[int] = 8 * 1024 * 1024
+    """ Read buffer size, set it to a big value for S3 """
+
+    write_buffer_size: Optional[int] = 8 * 1024 * 1024
+    """ Read buffer size, set it to a big value for S3 """
+    s3_bucket: Optional[str] = ""
+
     local_cache_directory: Optional[pathlib.Path] = pathlib.Path(
         platformdirs.user_cache_path("estelle", ensure_exists=True)
     )
+
     local_storage_directory: Optional[pathlib.Path] = pathlib.Path(
         platformdirs.user_cache_dir("estelle", ensure_exists=True)
     )

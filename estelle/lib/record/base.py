@@ -1,4 +1,5 @@
 import abc
+from types import NoneType
 from typing import Generic, Tuple, Optional, TypeVar
 
 from ..agent import Agent
@@ -94,7 +95,7 @@ class EnsembleBase(_BaseInterfaceMixin[Ensemble]):
     def _update_state(
         self,
         identity: str,
-        expected_state: Optional[EnsembleState],
+        expected_state: EnsembleState | NoneType,
         new_state: EnsembleState,
     ):
         raise NotImplementedError()

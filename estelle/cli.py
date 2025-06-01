@@ -13,6 +13,8 @@ from estelle.lib.config import config
 from estelle.lib.ensemble import EnsembleState
 
 _cli = typer.Typer()
+_ensemble_failures = typer.Typer()
+_cli.add_typer(_ensemble_failures, name="failures")
 
 CURRENT_USER_NAME = getpass.getuser()
 
@@ -175,6 +177,10 @@ If not present, show all ensembles.
         for ensemble_item in list_ensemble(status, user):
             table_row_appender(ensemble_item)
 
+@_ensemble_failures.command()
+def list(ensemble_id: Annotated[str, typer.Argument(help="Ensemble ID")]):
+    """List all test failures in the given ensemble"""
+    pass
 
 @_cli.command()
 def kill(

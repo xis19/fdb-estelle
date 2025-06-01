@@ -16,7 +16,13 @@ classifiers = [
   "License :: OSI Approved :: Apache 2.0 License",
   "Operating System :: OS Independent",
 ]
-dependencies = ["loguru ~= 0.7", "pyserde ~= 0.20", "tomli_w ~= 1.1", "platformdirs ~= 4.3"]
+dependencies = [
+  "loguru ~= 0.7",
+  "pyserde ~= 0.20",
+  "tomli_w ~= 1.1",
+  "platformdirs ~= 4.3",
+  "opendal ~= 0.45"
+]
 
 [project.optional-dependencies]
 cli = ["typer ~= 0.12", "typing-extensions ~= 4.12", "rich ~= 13.7"]
