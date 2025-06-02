@@ -2,7 +2,7 @@ import getpass
 import pathlib
 import sys
 
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 import typer
 
@@ -146,7 +146,7 @@ def inspect(
 @_cli.command()
 def list(
     status: Annotated[
-        Optional[List[int]],
+        Optional[Sequence[int]],
         typer.Option(
             prompt_required=False,
             help=f"""
@@ -171,7 +171,7 @@ If not present, show all ensembles.
     from estelle.lib.model import list_ensemble
 
     if status is not None:
-        status = tuple(EnsembleState(s) for s in status)
+        status = [EnsembleState(s) for s in status]
 
     with ensemble_table() as table_row_appender:
         for ensemble_item in list_ensemble(status, user):

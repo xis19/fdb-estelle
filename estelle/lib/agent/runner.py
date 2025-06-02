@@ -27,6 +27,8 @@ from ..storage import get_storage
 from ..task import Task
 from ..utils import chdir
 
+assert record is not None
+
 
 class TaskExecuteStage(enum.Enum):
     CONSTRUCT = 0
@@ -166,6 +168,8 @@ def _upload_execute_context(
 
     upload_thread.join()
 
+    return task_context
+
 
 class CorrectnessPackageExecutor(TaskExecutor):
 
@@ -179,7 +183,8 @@ class CorrectnessPackageExecutor(TaskExecutor):
         self._work_directory = tempfile.TemporaryDirectory(prefix="estelle")
         _prepare_context(self._context, self._work_directory.name)
 
-    def _execute(self) -> None:
+    def _execute(self) -> int:
+        assert self._work_directory is not None
         with chdir(self._work_directory.name):
             with open("stdout", mode="w") as stdout, open("stderr", mode="w") as stderr:
                 try:
@@ -189,17 +194,18 @@ class CorrectnessPackageExecutor(TaskExecutor):
                         stdout=stdout,
                         stderr=stderr,
                     )
-                    test_exec.communicate(self._timeout)
+                    test_exec.communicate(timeout=self._timeout)
 
                     self._failed = test_exec.returncode != 0
                     return test_exec.returncode
                 except subprocess.TimeoutExpired:
                     self._failed = True
                     logger.info("joshua_test failed with timeout")
-                    return None
+                    return -1
 
     def _teardown(self):
         if self._failed:
+            assert self._work_directory is not None
             _upload_execute_context(
                 self._task, self._context, self._work_directory.name
             )
@@ -246,8 +252,8 @@ def task_runner():
             continue
 
         executor = CorrectnessPackageExecutor(task, context, TASK_TIMEOUT)
+        exit_code: Optional[int] = None
         try:
-            exit_code: Optional[int] = None
             executor.setup()
             exit_code = executor.execute()
             executor.teardown()

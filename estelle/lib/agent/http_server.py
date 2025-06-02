@@ -3,10 +3,11 @@
 Replies HTTP endpoints for kubelet probes
 """
 
-import flask
+from flask import Flask
 
-_http_server = flask.app()
+app = Flask("http_server")
 
-@_http_server.route("/probe/liveness", methods=["GET"])
+
+@app.route("/probe/liveness", methods=["GET"])
 def liveness_response():
     pass
