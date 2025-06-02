@@ -103,7 +103,7 @@ def mock_start(
 
 @_cli.command()
 def pause(
-    ensemble_identity: Annotated[List[str], typer.Argument(help="Pause an ensemble")]
+    ensemble_identity: Annotated[List[str], typer.Argument(help="Pause an ensemble")],
 ):
     from estelle.lib.cli.ensemble import report_error
     from estelle.lib.model import pause_ensemble
@@ -117,7 +117,7 @@ def pause(
 
 @_cli.command()
 def resume(
-    ensemble_identity: Annotated[List[str], typer.Argument(help="Resume an ensemble")]
+    ensemble_identity: Annotated[List[str], typer.Argument(help="Resume an ensemble")],
 ):
     from estelle.lib.cli.ensemble import report_error
     from estelle.lib.model import resume_ensemble
@@ -136,15 +136,15 @@ ENSEMBLE_STATE_DESCRIPTIONS = "\n\n".join(
 
 @_cli.command()
 def inspect(
-    ensemble_identity: Annotated[str, typer.Argument(help="Inspect an ensemble")]
+    ensemble_identity: Annotated[str, typer.Argument(help="Inspect an ensemble")],
 ):
     from estelle.lib.model import inspect_ensemble
 
     inspect_ensemble(ensemble_identity)
 
 
-@_cli.command()
-def list(
+@_cli.command(name="list")
+def list_(
     status: Annotated[
         Optional[Sequence[int]],
         typer.Option(
@@ -170,21 +170,24 @@ If not present, show all ensembles.
     from estelle.lib.cli.ensemble import ensemble_table
     from estelle.lib.model import list_ensemble
 
+    status_ = None
     if status is not None:
-        status = [EnsembleState(s) for s in status]
+        status_ = [EnsembleState(s) for s in status]
 
     with ensemble_table() as table_row_appender:
-        for ensemble_item in list_ensemble(status, user):
+        for ensemble_item in list_ensemble(status_, user):
             table_row_appender(ensemble_item)
+
 
 @_ensemble_failures.command()
 def list(ensemble_id: Annotated[str, typer.Argument(help="Ensemble ID")]):
     """List all test failures in the given ensemble"""
     pass
 
+
 @_cli.command()
 def kill(
-    ensemble_identity: Annotated[List[str], typer.Argument(help="Kill an ensemble")]
+    ensemble_identity: Annotated[List[str], typer.Argument(help="Kill an ensemble")],
 ):
     from estelle.lib.cli.ensemble import report_error
     from estelle.lib.model import kill_ensemble
