@@ -3,10 +3,12 @@ import datetime
 import os
 import pathlib
 
+from typing import Union
+
 from rich.console import RenderableType
 from rich.text import Text
 
-__LOCAL_TIMEZONE: datetime.timezone = (
+__LOCAL_TIMEZONE: Union[datetime._TzInfo, None] = (
     datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
 )
 
@@ -16,7 +18,10 @@ def to_local_timezone(utc_datetime: datetime.datetime) -> datetime.datetime:
 
     NOTE: The returning datetime object has no timezone information
     """
-    return utc_datetime + __LOCAL_TIMEZONE.utcoffset(None)
+    if __LOCAL_TIMEZONE is not None and (offset := __LOCAL_TIMEZONE.utcoffset(None)):
+        return utc_datetime + offset
+    else:
+        return utc_datetime
 
 
 def get_utc_datetime() -> datetime.datetime:

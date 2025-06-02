@@ -33,29 +33,39 @@ class RecordConfig:
     """Database backend"""
 
     sql_connect_string: Optional[str] = "sqlite:///estelle.sqlite3"
+    """SQLite connect string"""
+
     fdb_cluster_file_path: Optional[str] = ""
+    """FoundationDB cluster file"""
 
 
 @serde.serde
 @dataclasses.dataclass
 class StorageConfig:
-    backend_type: Literal["local_filesystem"] = "local_filesystem"
+    backend_type: Literal["local_filesystem", "s3"] = "local_filesystem"
     """Object storage backend"""
 
-    read_buffer_size: Optional[int] = 8 * 1024 * 1024
+    read_buffer_size: int = 8 * 1024 * 1024
     """ Read buffer size, set it to a big value for S3 """
 
-    write_buffer_size: Optional[int] = 8 * 1024 * 1024
+    write_buffer_size: int = 8 * 1024 * 1024
     """ Read buffer size, set it to a big value for S3 """
-    s3_bucket: Optional[str] = ""
 
     local_cache_directory: Optional[pathlib.Path] = pathlib.Path(
         platformdirs.user_cache_path("estelle", ensure_exists=True)
     )
+    """ Local storage for file caching """
+
+    s3_bucket: Optional[str] = ""
+    """ Bucket name for S3 storage """
+
+    aws_region: Optional[str] = ""
+    """ AWS region """
 
     local_storage_directory: Optional[pathlib.Path] = pathlib.Path(
         platformdirs.user_cache_dir("estelle", ensure_exists=True)
     )
+    """ Storage directory for local """
 
 
 @serde.serde

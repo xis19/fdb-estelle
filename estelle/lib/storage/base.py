@@ -1,100 +1,17 @@
-import abc
 import dataclasses
 import io
+import pathlib
 
-from typing import Callable, Optional, Type
-from types import TracebackType
+
+from typing import Optional, List, Union
+
+import opendal
 
 from loguru import logger
 
 from .checksum import Checksum
 from ..config import config
 from ..context import Context
-
-
-class PartOpsBase(abc.ABC):
-    """Base class for part-wise ops"""
-
-    def prepare(self):
-        self._prepare()
-
-    def finalize(self):
-        self._finalize()
-
-    def success(self):
-        self._success()
-
-    def failure(self, ex: BaseException):
-        self._failure(ex)
-
-    @abc.abstractmethod
-    def _part_ops_generator(self, *args, **kwargs) -> Callable:
-        raise NotImplementedError()
-
-    def _prepare(self):
-        return
-
-    def _finalize(self):
-        return
-
-    def _failure(self, ex: BaseException):
-        logger.error(f"{self.__class__.__name__}: Failure {ex}")
-        raise ex
-
-    def _success(self):
-        return
-
-    def __enter__(self) -> Callable:
-        self.prepare()
-        return self._part_ops_generator()
-
-    def __exit__(
-        self,
-        exc_type: Optional[Type[BaseException]],
-        value: Optional[BaseException],
-        _: Optional[TracebackType],
-    ):
-        if exc_type is None:
-            self.success()
-        else:
-            self.failure(value)
-        self.finalize()
-
-
-class UploaderBase(PartOpsBase):
-    """Base class for context uploader"""
-
-    def __init__(self, context: Context):
-        self._context = context
-
-    def _part_ops_generator(self):
-        return self._upload_part
-
-    @abc.abstractmethod
-    def _upload_part(self, part: bytes):
-        raise NotImplementedError
-
-    def _failure(self, ex: BaseException):
-        logger.exception(f"Upload failed with exception {ex.__class__}")
-        raise ex
-
-
-class DownloaderBase(PartOpsBase):
-    """Base class for context downloader"""
-
-    def __init__(self, context: Context):
-        self._context = context
-
-    def _part_ops_generator(self):
-        return self._download_part
-
-    @abc.abstractmethod
-    def _download_part(self, buffer_size: int) -> bytes:
-        raise NotImplementedError()
-
-    def _failure(self, ex: BaseException):
-        logger.exception(f"Download failed with exception {ex.__class__}")
-        raise ex
 
 
 @dataclasses.dataclass
@@ -108,36 +25,54 @@ class Storage:
 
     def __init__(
         self,
-        uploader_factory: Callable[[Context], UploaderBase],
-        downloader_factory: Callable[[Context], DownloaderBase],
+        operator: opendal.Operator,
+        local_cache_directory: Optional[pathlib.Path] = None,
     ):
-        self._uploader_factory = uploader_factory
-        self._downloader_factory = downloader_factory
+        self._local_cache_directory: Optional[pathlib.Path] = None
+        if local_cache_directory is not None:
+            self._local_cache_directory = local_cache_directory
+            self._local_cache_directory.mkdir(mode=0o655, parents=True, exist_ok=True)
 
-    def _get_uploader(self, context: Context) -> UploaderBase:
-        return self._uploader_factory(context)
+        self._operator_ = operator
 
-    def _get_downloader(self, context: Context) -> DownloaderBase:
-        return self._downloader_factory(context)
+    @property
+    def _operator(self) -> opendal.Operator:
+        return self._operator_
 
     def upload(
         self,
         context: Context,
-        reader: io.BufferedReader,
+        reader: Union[io.BufferedReader, io.BytesIO],
         buffer_size: Optional[int] = None,
     ) -> IOResult:
         """Write the BLOB from the reader"""
-        buffer_size = buffer_size or config.storage.read_buffer_size
+        with self._operator.open(context.identity, "w") as stream:
+            return self._copy(reader, [stream], buffer_size)
+
+    def _is_locally_cached(self, context: Context) -> bool:
+        if self._local_cache_directory is None:
+            return False
+
+        return self._local_cache_directory.joinpath(context.identity).exists()
+
+    def _copy(
+        self,
+        source: Union[opendal.File, io.BufferedReader, io.BytesIO],
+        writers: List[Union[io.BufferedWriter, opendal.File]],
+        buffer_size: Optional[int] = None,
+    ) -> IOResult:
+        """Copy the BLOB"""
+        buffer_size = buffer_size or config.storage.write_buffer_size
         checksum = Checksum()
 
         total_bytes = 0
-        with self._get_uploader(context) as upload_part:
-            byte_data = reader.read(buffer_size)
-            while len(byte_data) != 0:
-                total_bytes += len(byte_data)
-                upload_part(byte_data)
-                checksum.update(byte_data)
-                byte_data = reader.read(buffer_size)
+        byte_data = source.read(buffer_size)
+        while len(byte_data) != 0:
+            total_bytes += len(byte_data)
+            for writer in writers:
+                writer.write(byte_data)
+            checksum.update(byte_data)
+            byte_data = source.read(buffer_size)
 
         return IOResult(checksum=checksum.hexdigest, total_bytes=total_bytes)
 
@@ -148,16 +83,18 @@ class Storage:
         buffer_size: Optional[int] = None,
     ) -> IOResult:
         """Read the BLOB by the identify into the writer"""
-        buffer_size = buffer_size or config.storage.write_buffer_size
-        checksum = Checksum()
+        if self._is_locally_cached(context):
+            assert self._local_cache_directory is not None
+            with open(
+                self._local_cache_directory.joinpath(context.identity), "rb"
+            ) as source:
+                return self._copy(source, [writer], buffer_size)
 
-        total_bytes = 0
-        with self._get_downloader(context) as download_part:
-            byte_data = download_part(buffer_size)
-            while len(byte_data) != 0:
-                total_bytes += len(byte_data)
-                writer.write(byte_data)
-                checksum.update(byte_data)
-                byte_data = download_part(buffer_size)
+        with self._operator.open(context.identity, "rb") as source:
+            if self._local_cache_directory is None:
+                return self._copy(source, [writer], buffer_size)
 
-        return IOResult(checksum=checksum.hexdigest, total_bytes=total_bytes)
+            with open(
+                self._local_cache_directory.joinpath(context.identity), "wb"
+            ) as local_cache_writer:
+                return self._copy(source, [writer, local_cache_writer], buffer_size)

@@ -1,7 +1,7 @@
 import io
 import pathlib
 
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Union
 
 from loguru import logger
 
@@ -9,6 +9,8 @@ from estelle.lib.context import Context
 from estelle.lib.ensemble import Ensemble, EnsembleState
 from estelle.lib.storage import get_storage
 from estelle.lib.record import record
+
+assert record is not None
 
 
 def create_test_ensemble(owner: str, runs: int, fail_fast: int, fail_rate: float):
@@ -56,7 +58,7 @@ def create_ensemble(
     timeout: int,
     runs: int,
     fail_fast: int,
-    tag: int,
+    tag: str,
 ):
     package_path = pathlib.Path(test_package)
     if not package_path.exists():
@@ -84,7 +86,7 @@ def create_ensemble(
 
 
 def list_ensemble(
-    state: Optional[EnsembleState | Sequence[EnsembleState]] = None,
+    state: Optional[Union[EnsembleState, Sequence[EnsembleState]]] = None,
     user: Optional[str] = None,
 ):
     if isinstance(state, EnsembleState):

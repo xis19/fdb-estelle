@@ -1,3 +1,5 @@
+import opendal
+
 from .base import Storage
 from ..config import config
 
@@ -5,16 +7,16 @@ from ..config import config
 def get_storage() -> Storage:
     backend = config.storage.backend_type
     if backend == "local_filesystem":
-        from .local_filesystem import Uploader, Downloader
-        from .cached_download import Downloader as CachedDownloader
-
-        local_storage_directory = config.storage.local_storage_directory
-        assert local_storage_directory is not None
+        # No caching required
         return Storage(
-            lambda context: Uploader(context, local_storage_directory),
-            lambda context: CachedDownloader(
-                context, Downloader(context, local_storage_directory)
+            opendal.Operator("fs", root=config.storage.local_storage_directory)
+        )
+    elif backend == "s3":
+        return Storage(
+            opendal.Operator(
+                "s3", bucket=config.storage.s3_bucket, region=config.storage.aws_region
             ),
+            local_cache_directory=config.storage.local_cache_directory,
         )
     else:
         raise RuntimeError(f"Unsupported backend type {backend}")
