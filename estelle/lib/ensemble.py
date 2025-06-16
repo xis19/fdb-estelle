@@ -5,7 +5,7 @@ import uuid
 
 from typing import Optional
 
-EnsembleState = enum.Enum(
+EnsembleState = enum.IntEnum(
     "EnsembleState",
     ["RUNNABLE", "STOPPED", "TIMEDOUT", "FAILED", "COMPLETED", "KILLED"],
 )
@@ -59,3 +59,4 @@ class Ensemble:
             time_used=0,
             max_fails=max_fails,
         )
+pass
