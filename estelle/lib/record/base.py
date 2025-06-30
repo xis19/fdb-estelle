@@ -1,11 +1,12 @@
 import abc
 from types import NoneType
-from typing import Generic, Tuple, Optional, TypeVar
+from typing import Generic, Tuple, Optional, TypeVar, Union, Sequence
 
 from ..agent import Agent
 from ..context import Context
 from ..ensemble import Ensemble, EnsembleState
 from ..task import Task, TaskState
+from ..utils import get_utc_datetime
 
 T = TypeVar("T")
 
@@ -63,7 +64,16 @@ class ContextBase(_BaseInterfaceMixin[Context]):
 
 class EnsembleStateInconsistentError(RuntimeError):
 
-    def __init__(self, identity: str, expected: EnsembleState, actual: EnsembleState):
+    def __init__(
+        self,
+        identity: str,
+        expected: Union[EnsembleState, Sequence[EnsembleState]],
+        actual: EnsembleState,
+    ):
+        if isinstance(expected, EnsembleState):
+            expected = (expected,)
+        else:
+            expected = tuple(expected)
         super().__init__(
             f"Unexpected ensemble {identity} state: Expected {expected}, actual: {actual}"
         )
@@ -76,7 +86,7 @@ class EnsembleStateInconsistentError(RuntimeError):
         return self._identity
 
     @property
-    def expected(self) -> EnsembleState:
+    def expected(self) -> Sequence[EnsembleState]:
         return self._expected
 
     @property
@@ -88,18 +98,80 @@ class EnsembleBase(_BaseInterfaceMixin[Ensemble]):
     """Base class for Ensemble data"""
 
     @abc.abstractmethod
-    def _iterate(self, owner: Optional[str] = None, state: Optional[Tuple[str]] = None):
+    def _count(
+        self, owner: Optional[str] = None, state: Optional[EnsembleState] = None
+    ):
         raise NotImplementedError()
+
+    @abc.abstractmethod
+    def _iterate(
+        self, owner: Optional[str] = None, state: Optional[EnsembleState] = None
+    ):
+        raise NotImplementedError()
+
+    @staticmethod
+    def _get_final_state(ensemble: Ensemble) -> bool:
+        if EnsembleState.is_terminated(ensemble.state):
+            return False
+
+        if Ensemble.is_failed(ensemble):
+            ensemble.state = EnsembleState.FAILED
+        elif Ensemble.is_completed(ensemble):
+            ensemble.state = EnsembleState.COMPLETED
+        else:
+            return False
+
+        now = get_utc_datetime()
+        ensemble.terminate_time = now
+        ensemble.updated_time_used(now)
+
+        return True
+
+    @staticmethod
+    def _get_updated_state(
+        ensemble: Ensemble,
+        expected_state: Optional[Union[EnsembleState, Sequence[EnsembleState]]],
+        new_state: EnsembleState,
+    ):
+        if isinstance(expected_state, EnsembleState):
+            expected_state = (expected_state,)
+        elif expected_state is not None:
+            expected_state = tuple(expected_state)
+
+        if (
+            expected_state is not None
+            and ensemble.state is not None
+            and ensemble.state not in expected_state
+        ):
+            raise EnsembleStateInconsistentError(
+                ensemble.identity, expected_state, ensemble.state
+            )
+
+        now = get_utc_datetime()
+        if (
+            ensemble.state is EnsembleState.RUNNABLE
+            and new_state is not EnsembleState.RUNNABLE
+            and ensemble.start_time is not None
+        ):
+            ensemble.time_used = (
+                ensemble.time_used + (now - ensemble.start_time).seconds
+            )
+
+        if (
+            ensemble.state is not EnsembleState.RUNNABLE
+            and new_state is EnsembleState.RUNNABLE
+        ):
+            ensemble.start_time = now
 
     @abc.abstractmethod
     def _update_state(
         self,
         identity: str,
-        expected_state: EnsembleState | NoneType,
+        expected_state: Optional[EnsembleState],
         new_state: EnsembleState,
     ):
         raise NotImplementedError()
-    
+
     def pause(self, identity: str):
         """Pause the ensemble"""
         self._update_state(identity, EnsembleState.RUNNABLE, EnsembleState.STOPPED)
@@ -111,15 +183,15 @@ class EnsembleBase(_BaseInterfaceMixin[Ensemble]):
     def kill(self, identity: str):
         """Kill the ensemble"""
         self._update_state(identity, None, EnsembleState.KILLED)
-    
+
     @abc.abstractmethod
     def _try_update_final_state(self, identity: str):
         raise NotImplementedError()
-    
+
     def try_update_final_state(self, identity: str):
         """Check if the ensemble should be marked as COMPLETED or FAILED"""
         self._try_update_final_state(identity)
-    
+
 
 class TaskBase(_BaseInterfaceMixin[Task]):
     """Base class for Task data"""

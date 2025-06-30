@@ -8,7 +8,7 @@ from typing import Union
 from rich.console import RenderableType
 from rich.text import Text
 
-__LOCAL_TIMEZONE: Union[datetime._TzInfo, None] = (
+__LOCAL_TIMEZONE: Union[datetime.tzinfo, None] = (
     datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
 )
 

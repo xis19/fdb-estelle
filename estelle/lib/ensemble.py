@@ -5,10 +5,24 @@ import uuid
 
 from typing import Optional
 
-EnsembleState = enum.IntEnum(
-    "EnsembleState",
-    ["RUNNABLE", "STOPPED", "TIMEDOUT", "FAILED", "COMPLETED", "KILLED"],
-)
+from utils import get_utc_datetime
+
+
+class EnsembleState(enum.IntEnum):
+    RUNNABLE = 0
+    STOPPED = 1
+    TIMEDOUT = 2
+    FAILED = 3
+    COMPLETED = 4
+    KILLED = 5
+
+    @staticmethod
+    def is_terminated(state: "EnsembleState") -> bool:
+        return state in (
+            EnsembleState.COMPLETED,
+            EnsembleState.FAILED,
+            EnsembleState.KILLED,
+        )
 
 
 @dataclasses.dataclass
@@ -59,4 +73,17 @@ class Ensemble:
             time_used=0,
             max_fails=max_fails,
         )
-pass
+
+    def is_failed(self) -> bool:
+        return self.max_fails is not None and self.num_failed >= self.max_fails
+
+    def is_completed(self) -> bool:
+        return not self.is_failed() and (
+            self.num_passed + self.num_failed >= self.total_runs
+        )
+
+    def updated_time_used(self, now: Optional[datetime.datetime] = None):
+        if self.start_time is not None:
+            if now is None:
+                now = get_utc_datetime()
+            self.time_used += (now - self.start_time).seconds

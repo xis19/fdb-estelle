@@ -8,7 +8,9 @@ record: Optional[RecordBase] = None
 
 if config.record.backend_type == "sql":
     from .sql import Record
-
-    record = Record()
+elif config.record.backend_type == "foundationdb":
+    from .foundationdb import Record
 else:
     raise RuntimeError(f"Unsupported backend {config.record.backend_type}")
+
+record = Record()

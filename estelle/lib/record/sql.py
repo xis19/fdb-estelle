@@ -215,7 +215,7 @@ class Ensemble(EnsembleBase):
     _query_yielder = _query_yielder_impl
 
     def _count(
-        self, state: Optional[EnsembleState] = None, owner: Optional[str] = None
+        self, owner: Optional[str] = None, state: Optional[EnsembleState] = None
     ) -> int:
         wheres = []
         if state is not None:
@@ -226,7 +226,7 @@ class Ensemble(EnsembleBase):
         with self._db.session() as session:
             return session.scalars(query).one()
 
-    def _iterate(self, owner: Optional[str], state: Optional[Sequence[str]]):
+    def _iterate(self, owner: Optional[str]=None, state: Optional[EnsembleState]=None):
         wheres = []
         if state is not None:
             wheres.append(ensemble_table.c.state.in_(tuple(state)))
@@ -257,18 +257,26 @@ class Ensemble(EnsembleBase):
             ):
                 return
 
-            possible_new_time_used = (
-                ensemble.time_used + (check_time - ensemble.start_time).seconds
-            )
+            possible_new_time_used = None
+            if ensemble.start_time is not None:
+                possible_new_time_used = (
+                    ensemble.time_used + (check_time - ensemble.start_time).seconds
+                )
             update_fields = None
-            if ensemble.num_failed >= ensemble.max_fails:
+            if (
+                ensemble.max_fails is not None
+                and ensemble.num_failed >= ensemble.max_fails
+            ):
                 update_fields = {ensemble_table.c.state: EnsembleState.FAILED}
             elif ensemble.num_passed + ensemble.num_failed >= ensemble.total_runs:
                 update_fields = {ensemble_table.c.state: EnsembleState.COMPLETED}
 
             if update_fields is not None:
                 update_fields.update({ensemble_table.c.terminate_time: check_time})
-                if ensemble.state is EnsembleState.RUNNABLE:
+                if (
+                    ensemble.state is EnsembleState.RUNNABLE
+                    and possible_new_time_used is not None
+                ):
                     update_fields.update(
                         {ensemble_table.c.time_used: possible_new_time_used}
                     )
@@ -276,7 +284,7 @@ class Ensemble(EnsembleBase):
                 session.query(ensemble_table).filter(
                     ensemble_table.c.identity == identity
                 ).update(update_fields)
-            
+
             session.commit()
 
     def _update_state(
@@ -292,6 +300,8 @@ class Ensemble(EnsembleBase):
         }
         if isinstance(expected_state, EnsembleState):
             expected_state = (expected_state,)
+        elif expected_state is not None:
+            expected_state = tuple(expected_state)
 
         with self._db.session() as session:
             ensemble: Optional[EnsembleItem] = (
@@ -301,7 +311,7 @@ class Ensemble(EnsembleBase):
             )
             if ensemble is None:
                 raise EnsembleMissingError(identity)
-            if expected_state is not None and ensemble.state is not expected_state:
+            if expected_state is not None and ensemble.state not in expected_state:
                 raise EnsembleStateInconsistentError(
                     identity, expected_state, ensemble.state
                 )
