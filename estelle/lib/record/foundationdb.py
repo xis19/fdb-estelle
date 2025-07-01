@@ -42,6 +42,13 @@ _db = fdb.open()
 
 class DataclassProtocol(Protocol):
     __dataclass_fields__: ClassVar[Dict[str, Any]]
+    identity: str
+
+
+class UpsertType(enum.IntEnum):
+    INSERT = 0
+    UPSERT = 1
+    UPDATE = 2
 
 
 @fdb.transactional
@@ -49,10 +56,14 @@ def _upsert(
     tr: fdb.Transaction,
     d: fdb.DirectoryLayer,
     item: DataclassProtocol,
-    upsert: bool = True,
+    upsert: UpsertType = UpsertType.UPDATE,
 ) -> bool:
-    if not (d.exists(tr) or upsert):
-        logger.warning("Not inserting since upsert flag is set to be False")
+    if not d.exists(tr, item.identity) and upsert is UpsertType.UPDATE:
+        logger.warning("Not inserting since upsert flag is set to be UPDATE")
+        return False
+
+    if d.exists(tr, item.identity) and upsert is UpsertType.INSERT:
+        logger.warning("Not updating since upsert flag is set to be INSERT")
         return False
 
     assert hasattr(item, "identity")
@@ -127,13 +138,39 @@ class Record(RecordBase):
     def __init__(self):
         super().__init__()
 
-        self._top_path = fdb.directory.create_or_open(_db)
+        self._top_path = fdb.directory.create_or_open(_db, "estelle")
+
+    @property
+    def top_path(self):
+        return self._top_path
 
     @property
     def ensemble(self) -> EnsembleBase:
         if self._ensemble is None:
             self._ensemble = Ensemble(self._top_path)
         return self._ensemble
+
+    @property
+    def context(self) -> ContextBase:
+        if self._context is None:
+            self._context = Context(self._top_path)
+        return self._context
+
+    @property
+    def task(self) -> TaskBase:
+        if self._task is None:
+            self._task = Task(self._top_path)
+        return self._task
+
+    @property
+    def agent(self) -> AgentBase:
+        if self._agent is None:
+            self._agent = Agent(self._top_path)
+        return self._agent
+
+    @property
+    def ensemble_task(self) -> EnsembleTaskBase:
+        return None
 
 
 class Context(ContextBase):
@@ -144,13 +181,25 @@ class Context(ContextBase):
     def __init__(self, top_path):
         super().__init__()
 
-        self._path = top_path.create_or_open(_db)
+        self._path = top_path.create_or_open(_db, "context")
+
+    def _insert(self, item: ContextItem):
+        _upsert(_db, self._path, item, UpsertType.INSERT)
+
+    def _get(self, identity: str) -> Optional[ContextItem]:
+        return _get(_db, self._path, identity, ContextItem)
+
+    def _count(self) -> int:
+        return len(_scan(_db, self._path, ContextItem))
 
     def _iterate(self, owner: Optional[str] = None):
         for item in _filter(
             _db, self._path, ContextItem, lambda t: Context._filter_func(t, owner)
         ):
             yield item
+
+    def _exists(self, identity: str) -> bool:
+        return self._get(identity) is not None
 
 
 class Ensemble(EnsembleBase):
@@ -207,8 +256,12 @@ class Ensemble(EnsembleBase):
 
         self._path = top_path.create_or_open(_db, "ensemble")
 
+    @property
+    def path(self):
+        return self._path
+
     def _insert(self, item: EnsembleItem):
-        _upsert(self._path, item, False)
+        _upsert(self._path, item, UpsertType.INSERT)
 
     def _exists(self, identity: str) -> bool:
         return self._get(identity) is not None
@@ -264,8 +317,12 @@ class Task(TaskBase):
 
         self._path = top_path.create_or_open(_db, "task")
 
+    @property
+    def path(self):
+        return self._path
+
     def _insert(self, item: TaskItem):
-        _upsert(self._path, item, False)
+        _upsert(self._path, item, UpsertType.INSERT)
 
     def _exists(self, identity: str) -> bool:
         return self._get(identity) is not None
@@ -290,8 +347,12 @@ class Agent(AgentBase):
 
         self._path = top_path.create_or_open(_db, "agent")
 
+    @property
+    def path(self):
+        return self._path
+
     def _insert(self, item: AgentItem):
-        _upsert(self._path, item, False)
+        _upsert(self._path, item, UpsertType.INSERT)
 
     def _exists(self, identity: str) -> bool:
         return self._get(identity) is not None
@@ -307,4 +368,31 @@ class Agent(AgentBase):
             yield item
 
     def _heartbeat(self, agent: AgentItem):
-        _upsert()
+        _upsert(_db, self._path, agent, UpsertType.UPSERT)
+
+
+class EnsembleTask(EnsembleTaskBase):
+
+    def __init__(self, ensemble: Ensemble, task: Task):
+        super().__init__()
+
+        self._ensemble_ = ensemble
+        self._task_ = task
+
+    @staticmethod
+    @fdb.transactional
+    def _report_start_task_impl(tr: fdb.Transaction, record: Record, task: TaskItem):
+        record.ensemble.path
+
+    @staticmethod
+    @fdb.transactional
+    def _report_task_result_impl(task_identity: str, return_value: Optional[int]):
+        pass
+
+    def _report_start_task(self, task: TaskItem):
+        EnsembleTask._report_start_task_impl(task)
+
+    def _report_task_result(
+        self, task_identity: str, return_value: Optional[int] = None
+    ):
+        EnsembleTask._report_task_result_impl(task_identity, return_value)

@@ -5,7 +5,7 @@ import uuid
 
 from typing import Optional
 
-from utils import get_utc_datetime
+from .utils import get_utc_datetime
 
 
 class EnsembleState(enum.IntEnum):
