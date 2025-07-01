@@ -1,3 +1,4 @@
+import datetime
 import enum
 
 from typing import (
@@ -51,6 +52,12 @@ class UpsertType(enum.IntEnum):
     UPDATE = 2
 
 
+def _write(tr: fdb.Transaction, d: fdb.DirectoryLayer, item: DataclassProtocol):
+    subdir = d.create_or_open(tr, item.identity)
+    for k, v in serialize(item).items():
+        logger.debug(f"Writing {subdir[k]} -- {v}")
+        tr[subdir[k]] = v
+
 @fdb.transactional
 def _upsert(
     tr: fdb.Transaction,
@@ -66,12 +73,7 @@ def _upsert(
         logger.warning("Not updating since upsert flag is set to be INSERT")
         return False
 
-    assert hasattr(item, "identity")
-    identity = getattr(item, "identity")
-    subdir = d.create_or_open(tr, identity)
-    for k, v in serialize(item).items():
-        logger.debug(f"Writing {subdir[k]} -- {v}")
-        tr[subdir[k]] = v
+    _write(tr, d, item)
 
     return True
 
@@ -79,7 +81,7 @@ def _upsert(
 _T = TypeVar("_T", bound=DataclassProtocol)
 
 
-def _get_impl[_T](tr: fdb.Transaction, d: fdb.DirectoryLayer, t: type[_T]) -> _T:
+def _get_impl(tr: fdb.Transaction, d: fdb.DirectoryLayer, t: type[_T]) -> _T:
     raw = {}
     for k, v in tr.get_range_startswith(d):
         _, key = fdb.tuple.unpack(k)
@@ -381,18 +383,50 @@ class EnsembleTask(EnsembleTaskBase):
 
     @staticmethod
     @fdb.transactional
-    def _report_start_task_impl(tr: fdb.Transaction, record: Record, task: TaskItem):
-        record.ensemble.path
+    def _report_start_task_impl(tr: fdb.Transaction, ensemble_table: Ensemble, task_table: Task, task: TaskItem):
+        if not ensemble_table.path.exists(tr, task.ensemble_identity):
+            raise EnsembleMissingError(task.ensemble_identity)
+        
+        ensemble_key = ensemble_table.path[task.ensemble_identity]
+        state = deserialize_by_type(tr[ensemble_key["state"]], EnsembleState)
+        max_fails = deserialize_by_type(tr[ensemble_key["max_fails"]], int)
+        num_failed = deserialize_by_type(tr[ensemble_key["num_failed"]], int)
+        if state is not EnsembleState.RUNNABLE or (max_fails is not None and num_failed is not None and max_fails <= num_failed):
+            raise EnsembleNotRunnableError(task.ensemble_identity, state)
+
+        _write(tr, task_table.path, task)
+
+        start_time = deserialize_by_type(tr[ensemble_key["start_time"]], datetime.datetime)
+        serialized_task_start_time = serialize_by_type(task.start_time)
+        if start_time is None:
+            tr[ensemble_key["start_time"]] =serialized_task_start_time 
+        tr[ensemble_key["state_last_modified_time"]] = serialized_task_start_time
+  
 
     @staticmethod
     @fdb.transactional
-    def _report_task_result_impl(task_identity: str, return_value: Optional[int]):
-        pass
+    def _report_task_result_impl(tr: fdb.Transaction, ensemble_table: Ensemble, task_table: Task, task_identity: str, return_value: Optional[int]):
+        if not task_table.path.exists(tr, task_identity):
+            raise KeyError(f"Task identity {task_identity} is not valid")
+
+        state = TaskState.SUCCEED if return_value == 0 else TaskState.FAILED
+        now = get_utc_datetime()
+        
+        tr[task_table.path[task_identity]["state"]] = serialize_by_type(state)
+        tr[task_table.path[task_identity]["terminate_time"]] = serialize_by_type(now)
+        tr[task_table.path[task_identity]["return_value"]] = serialize_by_type(return_value)
+    
+        ensemble_identity = deserialize_by_type(tr[task_table.path[task_identity]["ensemble_identity"]], str)
+        tr[ensemble_table.path[ensemble_identity]["state_last_modified_time"]] = serialize_by_type(now)
+        if state == TaskState.SUCCEED:
+            tr.add(ensemble_table.path[ensemble_identity]["num_passed"], serialize_by_type(1))
+        else: 
+            tr.add(ensemble_table.path[ensemble_identity]["num_failed"], serialize_by_type(1))
 
     def _report_start_task(self, task: TaskItem):
-        EnsembleTask._report_start_task_impl(task)
+        EnsembleTask._report_start_task_impl(_db, self._ensemble_, self._task_, task)
 
     def _report_task_result(
         self, task_identity: str, return_value: Optional[int] = None
     ):
-        EnsembleTask._report_task_result_impl(task_identity, return_value)
+        EnsembleTask._report_task_result_impl(_db, self._ensemble_, self._task_, task_identity, return_value)

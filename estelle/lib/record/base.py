@@ -68,7 +68,7 @@ class EnsembleStateInconsistentError(RuntimeError):
         self,
         identity: str,
         expected: Union[EnsembleState, Sequence[EnsembleState]],
-        actual: EnsembleState,
+        actual: Optional[EnsembleState],
     ):
         if isinstance(expected, EnsembleState):
             expected = (expected,)
@@ -230,7 +230,7 @@ class EnsembleMissingError(RuntimeError):
 
 class EnsembleNotRunnableError(EnsembleStateInconsistentError):
 
-    def __init__(self, identity: str, state: EnsembleState):
+    def __init__(self, identity: str, state: Optional[EnsembleState] = None):
         super().__init__(identity, EnsembleState.RUNNABLE, state)
 
 

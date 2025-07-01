@@ -226,7 +226,9 @@ class Ensemble(EnsembleBase):
         with self._db.session() as session:
             return session.scalars(query).one()
 
-    def _iterate(self, owner: Optional[str]=None, state: Optional[EnsembleState]=None):
+    def _iterate(
+        self, owner: Optional[str] = None, state: Optional[EnsembleState] = None
+    ):
         wheres = []
         if state is not None:
             wheres.append(ensemble_table.c.state.in_(tuple(state)))
@@ -416,9 +418,10 @@ class EnsembleTask(EnsembleTaskBase):
     def _report_start_task(self, task: TaskItem):
         with self._db.session() as session:
             ensemble: EnsembleItem = self._get_ensemble(task.ensemble_identity, session)
-            if (
-                ensemble.state != EnsembleState.RUNNABLE
-                or ensemble.max_fails <= ensemble.num_failed
+            if ensemble.state != EnsembleState.RUNNABLE or (
+                ensemble.max_fails is not None
+                and ensemble.num_failed is not None
+                and ensemble.max_fails <= ensemble.num_failed
             ):
                 raise EnsembleNotRunnableError(task.ensemble_identity, ensemble.state)
 
