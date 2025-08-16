@@ -9,17 +9,18 @@ from .utils import get_utc_datetime
 
 
 class EnsembleState(enum.IntEnum):
-    RUNNABLE = 0
-    STOPPED = 1
-    TIMEDOUT = 2
-    FAILED = 3
-    COMPLETED = 4
-    KILLED = 5
+    RUNNABLE = 1
+    STOPPED = 2
+    TIMEDOUT = 3
+    FAILED = 4
+    COMPLETED = 5
+    KILLED = 6
 
     @staticmethod
     def is_terminated(state: "EnsembleState") -> bool:
         return state in (
             EnsembleState.COMPLETED,
+            EnsembleState.TIMEDOUT,
             EnsembleState.FAILED,
             EnsembleState.KILLED,
         )
@@ -29,25 +30,24 @@ class EnsembleState(enum.IntEnum):
 class Ensemble:
     identity: str
     owner: str
-    priority: int
     create_time: datetime.datetime
     start_time: Optional[datetime.datetime]
     terminate_time: Optional[datetime.datetime]
     state: EnsembleState
     state_last_modified_time: datetime.datetime
     total_runs: int
-    num_passed: int
-    num_failed: int
     context_identity: str
     executable: str
     timeout: Optional[int]
     time_used: int
     max_fails: Optional[int]
+    num_running: Optional[int] = None
+    num_passed: Optional[int] = None
+    num_failed: Optional[int] = None
 
     @staticmethod
     def new(
         owner: str,
-        priority: int,
         total_runs: int,
         context_identity: str,
         executable: str,
@@ -58,15 +58,12 @@ class Ensemble:
         return Ensemble(
             identity=uuid.uuid4().hex,
             owner=owner,
-            priority=priority,
             create_time=_now,
             start_time=None,
             terminate_time=None,
             state=EnsembleState.RUNNABLE,
             state_last_modified_time=_now,
             total_runs=total_runs,
-            num_passed=0,
-            num_failed=0,
             context_identity=context_identity,
             executable=executable,
             timeout=timeout,
@@ -74,13 +71,8 @@ class Ensemble:
             max_fails=max_fails,
         )
 
-    def is_failed(self) -> bool:
-        return self.max_fails is not None and self.num_failed >= self.max_fails
-
-    def is_completed(self) -> bool:
-        return not self.is_failed() and (
-            self.num_passed + self.num_failed >= self.total_runs
-        )
+    def is_timed_out(self) -> bool:
+        return self.timeout is not None and self.time_used > self.timeout
 
     def updated_time_used(self, now: Optional[datetime.datetime] = None):
         if self.start_time is not None:

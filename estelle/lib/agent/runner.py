@@ -38,6 +38,9 @@ class TaskExecuteStage(enum.Enum):
     FINAL = 4
 
 
+_BLOCK_SIZE = 128 * 1024
+
+
 class TaskExecutor(abc.ABC):
 
     def __init__(self, task: Task, context: Context):
@@ -98,9 +101,23 @@ def _download_proc(context: Context, output_stream: io.BufferedWriter):
 
 
 def _decompress_data(work_directory: pathlib.Path, input_stream: io.BufferedReader):
-    with gzip.GzipFile(fileobj=input_stream, mode="r") as gzip_stream:
-        with tarfile.TarFile(fileobj=gzip_stream, mode="r") as tar_stream:
-            tar_stream.extractall(work_directory)
+    # TODO Cache the decompressed data
+    with chdir(work_directory):
+        with subprocess.Popen(
+            ["tar", "xz"], executable="tar", stdin=subprocess.PIPE
+        ) as tar:
+            assert tar.stdin is not None
+            logger.info(f"Decompressing from stream: {work_directory}")
+            num_bytes = 0
+            while data := input_stream.read(_BLOCK_SIZE):
+                tar.stdin.write(data)
+                num_bytes += len(data)
+            logger.info(f"Decompressed {num_bytes} bytes")
+
+    # Python builtin tar.gz is *EXTREMELY* slow
+    # with gzip.GzipFile(fileobj=input_stream, mode="r") as gzip_stream:
+    #     with tarfile.TarFile(fileobj=gzip_stream, mode="r") as tar_stream:
+    #         tar_stream.extractall(work_directory)
 
 
 def _prepare_context(context: Context, work_directory: pathlib.Path):
@@ -167,6 +184,8 @@ def _upload_execute_context(
     upload_thread.start()
 
     upload_thread.join()
+    pack_thread.join()
+    logger.info(f"Uploaded context {task.execution_context_identity}")
 
     return task_context
 
@@ -186,11 +205,12 @@ class CorrectnessPackageExecutor(TaskExecutor):
     def _execute(self) -> int:
         assert self._work_directory is not None
         with chdir(self._work_directory.name):
+            logger.info(f"Running test at {self._work_directory.name}")
             with open("stdout", mode="w") as stdout, open("stderr", mode="w") as stderr:
                 try:
                     test_exec = subprocess.Popen(
                         executable="./joshua_test",
-                        args=(),
+                        args=tuple(),
                         stdout=stdout,
                         stderr=stderr,
                     )
@@ -215,12 +235,14 @@ class CorrectnessPackageExecutor(TaskExecutor):
 
 
 TASK_TIMEOUT: float = 1800
+RETIRE_AFTER_TASK: int = 10000
 
 
 def task_runner():
     last_task_run_time: datetime.datetime = datetime.datetime.now()
 
-    while True:
+    task_count = 0
+    while task_count < RETIRE_AFTER_TASK:
         task_pair = task_list.take_task()
 
         if task_pair is None:
@@ -236,8 +258,10 @@ def task_runner():
 
         task, context = task_pair
 
-        # Simulates the execution
-        logger.info(f"Task {task.identity}, ensemble {task.ensemble_identity}: start")
+        task_count += 1
+        logger.info(
+            f"Task {task.identity}, ensemble {task.ensemble_identity}: start ({task_count}/{RETIRE_AFTER_TASK})"
+        )
         last_task_run_time = datetime.datetime.now()
 
         try:
@@ -274,3 +298,6 @@ def task_runner():
             agent_info.task_succeed()
         else:
             agent_info.tasks_failed()
+
+    logger.info(f"Agent retired after {RETIRE_AFTER_TASK}")
+    agent_info.retire()

@@ -5,7 +5,12 @@ import uuid
 
 from typing import Optional
 
-TaskState = enum.Enum("TaskState", ["RUNNING", "SUCCEED", "FAILED"])
+
+class TaskState(enum.IntEnum):
+    RUNNING = 1
+    SUCCEED = 2
+    FAILED = 3
+    TIMEDOUT = 4
 
 
 @dataclasses.dataclass
@@ -15,12 +20,12 @@ class Task:
     start_time: datetime.datetime
     terminate_time: Optional[datetime.datetime]
     state: TaskState
-    args: Optional[str]
+    args: str
     return_value: Optional[int]
     execution_context_identity: Optional[str]
 
     @staticmethod
-    def new(ensemble_identity: str, args: Optional[str] = None):
+    def new(ensemble_identity: str, args: str) -> "Task":
         return Task(
             identity=uuid.uuid4().hex,
             ensemble_identity=ensemble_identity,
@@ -29,5 +34,5 @@ class Task:
             state=TaskState.RUNNING,
             args=args,
             return_value=None,
-            execution_context_identity=None,
+            execution_context_identity=None
         )

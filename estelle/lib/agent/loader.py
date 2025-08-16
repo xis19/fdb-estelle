@@ -1,4 +1,5 @@
 import random
+import datetime
 import time
 
 from typing import Optional
@@ -17,8 +18,16 @@ def _get_ensemble() -> Optional[Ensemble]:
     """Gets an ensemble to run"""
     candidates = tuple(list_ensemble(EnsembleState.RUNNABLE))
     if len(candidates) > 0:
+        now = datetime.datetime.now(datetime.timezone.utc)
         return random.choices(
-            candidates, weights=[abs(c.priority) + 1 for c in candidates], k=1
+            candidates,
+            weights=[
+                (
+                    now - (candidate.start_time or datetime.datetime.fromtimestamp(0))
+                ).seconds
+                for candidate in candidates
+            ],
+            k=1,
         )[0]
 
     return None
@@ -30,7 +39,7 @@ def _prepare_tasks(ensemble_identity: str, context: Context) -> int:
         task_list.add_task(
             Task.new(
                 ensemble_identity=ensemble_identity,
-                args=None,
+                args="",
             ),
             context,
         )

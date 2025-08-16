@@ -2,7 +2,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from dataclasses import asdict
 from sqlite3 import Connection as SQLite3Connection
-from typing import Mapping, Optional, Sequence
+from typing import Mapping, Optional, Sequence, Union
 
 import sqlalchemy
 import sqlalchemy_utils
@@ -254,6 +254,7 @@ class Ensemble(EnsembleBase):
 
             if ensemble.state in (
                 EnsembleState.COMPLETED,
+                EnsembleState.TIMEDOUT,
                 EnsembleState.FAILED,
                 EnsembleState.KILLED,
             ):
@@ -292,7 +293,7 @@ class Ensemble(EnsembleBase):
     def _update_state(
         self,
         identity: str,
-        expected_state: Optional[EnsembleState | Sequence[EnsembleState]],
+        expected_state: Optional[Union[EnsembleState, Sequence[EnsembleState]]],
         new_state: EnsembleState,
     ):
         now = get_utc_datetime()

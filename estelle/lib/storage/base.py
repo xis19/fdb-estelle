@@ -46,7 +46,7 @@ class Storage:
         buffer_size: Optional[int] = None,
     ) -> IOResult:
         """Write the BLOB from the reader"""
-        with self._operator.open(context.identity, "w") as stream:
+        with self._operator.open(context.identity, "wb") as stream:
             return self._copy(reader, [stream], buffer_size)
 
     def _is_locally_cached(self, context: Context) -> bool:

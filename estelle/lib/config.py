@@ -83,10 +83,10 @@ class AgentConfig:
     task_list_check_interval: float = 1.0
     """ The interval the agent checks its task list """
 
-    max_idle_time: float = 3.0
+    max_idle_time: float = 30.0
     """ If the agent does not have task for max_idle_time, it should terminate itself """
 
-    heartbeat_interval: float = 1.0
+    heartbeat_interval: float = 5.0
     """ The interval the agent reports its heartbeat """
 
 

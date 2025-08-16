@@ -2,7 +2,7 @@ import getpass
 import pathlib
 import sys
 
-from typing import List, Optional, Sequence
+from typing import List, Optional
 
 import typer
 
@@ -11,10 +11,12 @@ from typing_extensions import Annotated
 
 from estelle.lib.config import config
 from estelle.lib.ensemble import EnsembleState
+from estelle.lib.task import TaskState
 
 _cli = typer.Typer()
+_list = typer.Typer()
 _ensemble_failures = typer.Typer()
-_cli.add_typer(_ensemble_failures, name="failures")
+_cli.add_typer(_list, name="list")
 
 CURRENT_USER_NAME = getpass.getuser()
 
@@ -25,10 +27,6 @@ def start(
         pathlib.Path,
         typer.Option(help="Package contains the test context, e.g. correctness.tar.gz"),
     ],
-    test_command: Annotated[
-        pathlib.Path,
-        typer.Option(help="Command used to trigger the test in the context"),
-    ],
     user: Annotated[
         str,
         typer.Option(
@@ -36,9 +34,6 @@ def start(
             help=f"User name, default to {CURRENT_USER_NAME}",
         ),
     ] = CURRENT_USER_NAME,
-    priority: Annotated[
-        int, typer.Option(prompt_required=False, help="Priority, default to 0")
-    ] = 0,
     timeout: Annotated[
         int,
         typer.Option(
@@ -69,9 +64,7 @@ def start(
 ):
     from estelle.lib.model import create_ensemble
 
-    create_ensemble(
-        test_package, test_command, user, priority, timeout, runs, fail_fast, tag
-    )
+    create_ensemble(test_package, user, priority, timeout, runs, fail_fast, tag)
 
 
 @_cli.command()
@@ -129,8 +122,11 @@ def resume(
             report_error(identity, ex)
 
 
-ENSEMBLE_STATE_DESCRIPTIONS = "\n\n".join(
+_ENSEMBLE_STATE_DESCRIPTIONS = "\n\n".join(
     f"{item.value} - {item.name}" for item in EnsembleState
+)
+_TASK_STATE_DESCRIPTIONS = "\n\n".join(
+    f"{item.value} - {item.name}" for item in TaskState
 )
 
 
@@ -143,17 +139,17 @@ def inspect(
     inspect_ensemble(ensemble_identity)
 
 
-@_cli.command(name="list")
-def list_(
-    status: Annotated[
-        Optional[Sequence[int]],
+@_list.command(name="ensemble")
+def list_ensemble(
+    state: Annotated[
+        Optional[List[int]],
         typer.Option(
             prompt_required=False,
             help=f"""
 State of the ensemble in integer:
 
 
-{ENSEMBLE_STATE_DESCRIPTIONS}
+{_ENSEMBLE_STATE_DESCRIPTIONS}
 
 
 If not present, show all ensembles.
@@ -170,13 +166,36 @@ If not present, show all ensembles.
     from estelle.lib.cli.ensemble import ensemble_table
     from estelle.lib.model import list_ensemble
 
-    status_ = None
-    if status is not None:
-        status_ = [EnsembleState(s) for s in status]
+    state_ = None
+    if state is not None:
+        state_ = [EnsembleState(s) for s in state]
 
     with ensemble_table() as table_row_appender:
-        for ensemble_item in list_ensemble(status_, user):
+        for ensemble_item in list_ensemble(state_, user):
             table_row_appender(ensemble_item)
+
+
+@_list.command(name="task")
+def list_task(
+    ensemble_identity: Annotated[str, typer.Argument(help="Ensemble ID")],
+    state_: Annotated[
+        Optional[List[int]],
+        typer.Option(
+            prompt_required=False,
+            help=f"""
+State of the task in integer:
+
+
+{_TASK_STATE_DESCRIPTIONS}
+
+
+If not present, show only failed tasks.
+""",
+        ),
+    ] = None,
+):
+    from estelle.lib.cli.task import task_table
+    from estelle.lib.model import list_task
 
 
 @_ensemble_failures.command()

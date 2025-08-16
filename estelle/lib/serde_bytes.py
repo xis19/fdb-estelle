@@ -20,12 +20,13 @@ def serialize_by_type(value: Any) -> bytes:
         return value
     elif isinstance(value, str):
         return value.encode()
+    # NOTE: True/False are also instance of int
+    elif isinstance(value, bool):
+        return struct.pack("?", value)
     elif isinstance(value, int):
         return struct.pack("<q", value)
     elif isinstance(value, float):
         return struct.pack("<d", value)
-    elif isinstance(value, bool):
-        return struct.pack("?", value)
     elif value is None:
         return b""
     elif isinstance(value, datetime.datetime):
@@ -36,7 +37,7 @@ def serialize_by_type(value: Any) -> bytes:
     raise TypeError(f"Unsupported type {type(value)} for value {value}")
 
 
-def deserialize_by_type[T](raw: bytes, t: Union[type[T], str]) -> Optional[T]:
+def deserialize_by_type(raw: bytes, t: type[T]) -> Optional[T]:
     if len(raw) == 0:
         return None
 
@@ -51,7 +52,9 @@ def deserialize_by_type[T](raw: bytes, t: Union[type[T], str]) -> Optional[T]:
     elif t is bool:
         return struct.unpack("?", raw)[0]
     elif t is datetime.datetime:
-        return datetime.datetime.fromtimestamp(deserialize_by_type(raw, float))
+        return datetime.datetime.fromtimestamp(
+            deserialize_by_type(raw, float)
+        ).astimezone(datetime.timezone.utc)
     elif hasattr(t, "mro") and enum.IntEnum in t.mro():
         return t(deserialize_by_type(raw, int))
 
@@ -84,7 +87,7 @@ def serialize(
 DC = TypeVar("DC", bound=DataclassProtocol)
 
 
-def deserialize[DC](dc: type[DC], raw: Dict[bytes, bytes]) -> DC:
+def deserialize(dc: type[DC], raw: Dict[bytes, bytes]) -> DC:
     deserialized: Dict[str, Any] = dict()
     dc_keys = {
         field.name: _uncrustify_type(field.type) for field in dataclasses.fields(dc)
@@ -94,8 +97,9 @@ def deserialize[DC](dc: type[DC], raw: Dict[bytes, bytes]) -> DC:
         str_k = k.decode()
         if str_k not in dc_keys:
             logger.warning(f"Key {str_k} is not in data class {dc}")
-        deserialized[str_k] = deserialize_by_type(v, dc_keys[str_k])
-        del dc_keys[str_k]
+        else:
+            deserialized[str_k] = deserialize_by_type(v, dc_keys[str_k])
+            dc_keys.pop(str_k, None)
 
     if len(dc_keys) > 0:
         for k in dc_keys:

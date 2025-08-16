@@ -30,7 +30,8 @@ agent = ["click ~= 8.1", "flask ~= 3.0"]
 aws = ["boto3 ~= 1.35"]
 sql = ["sqlalchemy ~= 2.0", "sqlalchemy-utils ~= 0.41"]
 test = ["pytest ~= 8.3"]
-dev = ["ipdb"]
+fdb = ["foundationdb ~= 7.3"]
+dev = ["ipdb", "black"]
 
 [project.urls]
 Homepage = "http://github.com/xiaoge-su/fdb-estelle"

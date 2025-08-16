@@ -1,12 +1,13 @@
 import io
 import pathlib
 
-from typing import Optional, Sequence, Union
+from typing import Optional, Sequence, Union, Generator
 
 from loguru import logger
 
 from estelle.lib.context import Context
 from estelle.lib.ensemble import Ensemble, EnsembleState
+from estelle.lib.task import Task, TaskState
 from estelle.lib.storage import get_storage
 from estelle.lib.record import record
 
@@ -39,7 +40,6 @@ def create_test_ensemble(owner: str, runs: int, fail_fast: int, fail_rate: float
 
     ensemble = Ensemble.new(
         owner=owner,
-        priority=0,
         total_runs=runs,
         context_identity=context.identity,
         executable="correctness",
@@ -52,9 +52,7 @@ def create_test_ensemble(owner: str, runs: int, fail_fast: int, fail_rate: float
 
 def create_ensemble(
     test_package: pathlib.Path,
-    test_command: pathlib.Path,
     user: str,
-    priority: int,
     timeout: int,
     runs: int,
     fail_fast: int,
@@ -75,10 +73,10 @@ def create_ensemble(
 
     ensemble = Ensemble.new(
         owner=user,
-        priority=priority,
         total_runs=runs,
         context_identity=context.identity,
-        executable=str(test_command),
+        # FIXME hardcoded
+        executable="./joshua_test",
         timeout=timeout,
         max_fails=fail_fast,
     )
@@ -88,12 +86,24 @@ def create_ensemble(
 def list_ensemble(
     state: Optional[Union[EnsembleState, Sequence[EnsembleState]]] = None,
     user: Optional[str] = None,
-):
+) -> Generator[Ensemble, None, None]:
     if isinstance(state, EnsembleState):
         state = (state,)
     states = tuple(e.name for e in (state or EnsembleState))
 
     for item in record.ensemble.iterate(owner=user, state=states):
+        yield item
+
+
+def list_task(
+    ensemble_identity: str,
+    state: Optional[Union[TaskState, Sequence[TaskState]]] = None,
+):
+    if isinstance(state, TaskState):
+        state = (state,)
+    states = tuple(e.name for e in (state or TaskState))
+
+    for item in record.task.iterate(ensemble_identity=ensemble_identity, state=states):
         yield item
 
 

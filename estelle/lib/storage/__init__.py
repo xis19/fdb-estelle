@@ -9,7 +9,7 @@ def get_storage() -> Storage:
     if backend == "local_filesystem":
         # No caching required
         return Storage(
-            opendal.Operator("fs", root=config.storage.local_storage_directory)
+            opendal.Operator("fs", root=str(config.storage.local_storage_directory))
         )
     elif backend == "s3":
         return Storage(

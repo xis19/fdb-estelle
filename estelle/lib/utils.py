@@ -34,7 +34,7 @@ def render_datetime(utc_datetime: datetime.datetime) -> RenderableType:
     return Text(to_local_timezone(utc_datetime).strftime("%Y/%m/%d %H:%M:%S"))
 
 
-__ID_WIDTH: int = 8
+__ID_WIDTH: int = 32
 
 
 def get_id_width() -> int:

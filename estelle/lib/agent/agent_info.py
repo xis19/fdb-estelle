@@ -1,4 +1,3 @@
-import datetime
 import threading
 
 from loguru import logger
@@ -27,8 +26,11 @@ class AgentInfo:
 
     def heartbeat(self):
         with self._lock:
-            self._agent.heartbeat = datetime.datetime.now(datetime.timezone.utc)
-            record.agent.heartbeat(self._agent)
+            record.agent.heartbeat(self._agent.identity)
+
+    def retire(self):
+        with self._lock:
+            record.agent.retire(self._agent.identity)
 
 
 agent_info: AgentInfo = AgentInfo()
