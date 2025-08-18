@@ -5,12 +5,10 @@ from rich.live import Live
 from rich.table import Table
 from rich.text import Text
 
-from ..record.base import (
-    EnsembleMissingError,
-    EnsembleStateInconsistentError,
-)
-from ..ensemble import Ensemble as EnsembleItem, EnsembleState
 from ..context import Context as ContextItem
+from ..ensemble import Ensemble as EnsembleItem
+from ..ensemble import EnsembleState
+from ..record.base import EnsembleMissingError, EnsembleStateInconsistentError
 from ..utils import get_id_width, get_utc_datetime, render_datetime
 
 

@@ -2,8 +2,7 @@ import contextlib
 import datetime
 import os
 import pathlib
-
-from typing import Union
+from typing import Optional, Union
 
 from rich.console import RenderableType
 from rich.text import Text
@@ -29,9 +28,11 @@ def get_utc_datetime() -> datetime.datetime:
     return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
 
 
-def render_datetime(utc_datetime: datetime.datetime) -> RenderableType:
+def render_datetime(utc_datetime: Optional[datetime.datetime]) -> RenderableType:
     """Renders a date time object to RenderableType"""
-    return Text(to_local_timezone(utc_datetime).strftime("%Y/%m/%d %H:%M:%S"))
+    if utc_datetime is not None:
+        Text(to_local_timezone(utc_datetime).strftime("%Y/%m/%d %H:%M:%S"))
+    return ""
 
 
 __ID_WIDTH: int = 32

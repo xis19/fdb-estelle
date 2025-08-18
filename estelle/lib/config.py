@@ -1,12 +1,10 @@
 import dataclasses
 import pathlib
-
 from typing import Literal, Optional
 
 import platformdirs
 import serde
 import serde.toml
-
 
 _CONFIG_FILE_NAME: str = "config.toml"
 _CONFIG_DIR: str = platformdirs.user_config_dir("fdb-estelle", ensure_exists=True)
@@ -88,6 +86,12 @@ class AgentConfig:
 
     heartbeat_interval: float = 5.0
     """ The interval the agent reports its heartbeat """
+
+    task_timeout: float = 1800.0
+    """ The timeout for each task execution, in seconds """
+
+    retire_after_task: int = 10000
+    """ The agent will retire after this many tasks """
 
 
 @serde.serde

@@ -1,6 +1,6 @@
 import abc
-from typing import Any, Generic, Optional, TypeVar, Union, Sequence, Tuple, Mapping
 from types import NoneType
+from typing import Any, Generator, Generic, Mapping, Optional, Sequence, TypeVar, Union
 
 from ..agent import Agent
 from ..context import Context
@@ -123,8 +123,17 @@ class TaskBase(abc.ABC):
     def num_running(self) -> int:
         raise NotImplementedError()
 
+    @abc.abstractmethod
+    def num_timedout(self) -> int:
+        raise NotImplementedError()
+
     def num_total(self) -> int:
-        return self.num_failed() + self.num_passed() + self.num_running()
+        return (
+            self.num_failed()
+            + self.num_passed()
+            + self.num_running()
+            + self.num_timedout()
+        )
 
     @abc.abstractmethod
     def _new_task(self, task: Task):
@@ -164,6 +173,20 @@ class TaskBase(abc.ABC):
 
     def retire(self):
         return self._retire()
+
+    def get(self, task_identity: str) -> Optional[Task]:
+        return self._get(task_identity)
+
+    @abc.abstractmethod
+    def _get(self, task_identity: str) -> Optional[Task]:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def _list_by_taskstate(self, task_state: TaskState):
+        raise NotImplementedError()
+
+    def list_by_taskstate(self, task_state: TaskState):
+        return self._list_by_taskstate(task_state)
 
 
 class EnsembleBase(_BaseInterfaceMixin[Ensemble]):
@@ -228,15 +251,35 @@ class EnsembleBase(_BaseInterfaceMixin[Ensemble]):
             ensemble_identity, task_identity, return_value, execution_context_identity
         )
 
+    def get_task(self, ensemble_identity: str, task_identity: str) -> Optional[Task]:
+        """Get the task by its identity"""
+        return self._get_task(ensemble_identity, task_identity)
+
+    @abc.abstractmethod
+    def _get_task(self, ensemble_identity: str, task_identity: str) -> Optional[Task]:
+        raise NotImplementedError()
+
+    def iterate_tasks(
+        self, ensemble_identity: str, task_state: Optional[TaskState] = None
+    ) -> Generator[Task, None, None]:
+        """Iterate over all tasks in the ensemble"""
+        return self._iterate_tasks(ensemble_identity, task_state)
+
+    @abc.abstractmethod
+    def _iterate_tasks(
+        self, ensemble_identity: str, task_state: Optional[TaskState]
+    ) -> Generator[Task, None, None]:
+        raise NotImplementedError()
+
 
 class AgentBase(_BaseInterfaceMixin[Agent]):
     """Base class for Agents"""
 
-    def heartbeat(self, identity: str):
-        return self._heartbeat(identity)
+    def heartbeat(self, agent_item: Agent):
+        return self._heartbeat(agent_item)
 
     @abc.abstractmethod
-    def _heartbeat(self, identity: str):
+    def _heartbeat(self, agent_item: Agent):
         raise NotImplementedError()
 
 

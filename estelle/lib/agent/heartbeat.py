@@ -2,8 +2,8 @@ import time
 
 from loguru import logger
 
-from .agent_info import agent_info
 from ..config import config
+from .agent_info import agent_info
 
 
 def heartbeat():

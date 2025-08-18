@@ -1,16 +1,23 @@
 from copy import deepcopy
-from datetime import datetime, timezone
 from dataclasses import asdict
+from datetime import datetime, timezone
 from sqlite3 import Connection as SQLite3Connection
 from typing import Mapping, Optional, Sequence, Union
 
 import sqlalchemy
 import sqlalchemy_utils
-
 from loguru import logger
-from sqlalchemy import Engine, event, func, select, Select
+from sqlalchemy import Engine, Select, event, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..agent import Agent as AgentItem
+from ..config import config
+from ..context import Context as ContextItem
+from ..ensemble import Ensemble as EnsembleItem
+from ..ensemble import EnsembleState
+from ..task import Task as TaskItem
+from ..task import TaskState
+from ..utils import get_utc_datetime
 from .base import (
     AgentBase,
     ContextBase,
@@ -23,13 +30,6 @@ from .base import (
     TaskBase,
 )
 from .sql_base import agent_table, context_table, ensemble_table, metadata, task_table
-from ..agent import Agent as AgentItem
-from ..config import config
-from ..context import Context as ContextItem
-from ..ensemble import Ensemble as EnsembleItem, EnsembleState
-from ..task import Task as TaskItem, TaskState
-from ..utils import get_utc_datetime
-
 
 _IDENTITY_SHORTCUT_LENGTH: int = 8
 
@@ -439,7 +439,7 @@ class EnsembleTask(EnsembleTaskBase):
 
     def _report_task_result(self, identity: str, return_value: Optional[int]):
         if return_value == 0:
-            state = TaskState.SUCCEED
+            state = TaskState.PASSED
         else:
             state = TaskState.FAILED
 
@@ -466,7 +466,7 @@ class EnsembleTask(EnsembleTaskBase):
             ensemble_update_map = {
                 ensemble_table.c.state_last_modified_time: task_terminate_time
             }
-            if state == TaskState.SUCCEED:
+            if state == TaskState.PASSED:
                 ensemble_update_map[ensemble_table.c.num_passed] = (
                     ensemble.num_passed + 1
                 )

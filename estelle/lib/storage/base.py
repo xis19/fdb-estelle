@@ -1,17 +1,14 @@
 import dataclasses
 import io
 import pathlib
-
-
-from typing import Optional, List, Union
+from typing import List, Optional, Union
 
 import opendal
-
 from loguru import logger
 
-from .checksum import Checksum
 from ..config import config
 from ..context import Context
+from .checksum import Checksum
 
 
 @dataclasses.dataclass
@@ -42,7 +39,7 @@ class Storage:
     def upload(
         self,
         context: Context,
-        reader: Union[io.BufferedReader, io.BytesIO],
+        reader: Union[io.BufferedReader, io.BytesIO, io.FileIO],
         buffer_size: Optional[int] = None,
     ) -> IOResult:
         """Write the BLOB from the reader"""

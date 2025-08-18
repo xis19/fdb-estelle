@@ -1,15 +1,14 @@
 import io
 import pathlib
-
-from typing import Optional, Sequence, Union, Generator
+from typing import Generator, Optional, Sequence, Union
 
 from loguru import logger
 
 from estelle.lib.context import Context
 from estelle.lib.ensemble import Ensemble, EnsembleState
-from estelle.lib.task import Task, TaskState
-from estelle.lib.storage import get_storage
 from estelle.lib.record import record
+from estelle.lib.storage import get_storage
+from estelle.lib.task import Task, TaskState
 
 assert record is not None
 
@@ -89,7 +88,7 @@ def list_ensemble(
 ) -> Generator[Ensemble, None, None]:
     if isinstance(state, EnsembleState):
         state = (state,)
-    states = tuple(e.name for e in (state or EnsembleState))
+    states = tuple(e for e in (state or EnsembleState))
 
     for item in record.ensemble.iterate(owner=user, state=states):
         yield item
@@ -97,13 +96,9 @@ def list_ensemble(
 
 def list_task(
     ensemble_identity: str,
-    state: Optional[Union[TaskState, Sequence[TaskState]]] = None,
+    state: Optional[TaskState] = None,
 ):
-    if isinstance(state, TaskState):
-        state = (state,)
-    states = tuple(e.name for e in (state or TaskState))
-
-    for item in record.task.iterate(ensemble_identity=ensemble_identity, state=states):
+    for item in record.ensemble.iterate_tasks(ensemble_identity, state):
         yield item
 
 

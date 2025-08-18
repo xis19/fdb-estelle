@@ -5,7 +5,6 @@ from loguru import logger
 from ..config import config
 from .base import RecordBase
 
-
 if config.record.backend_type == "sql":
     raise RuntimeError("SQL backend is not supported in this version of Estelle.")
 

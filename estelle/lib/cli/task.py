@@ -5,7 +5,8 @@ from rich.live import Live
 from rich.table import Table
 from rich.text import Text
 
-from ..task import Task as TaskItem, TaskState
+from ..task import Task as TaskItem
+from ..task import TaskState
 from ..utils import get_id_width, get_utc_datetime, render_datetime
 
 
@@ -22,7 +23,7 @@ def task_table(ensemble_id: str):
         style = ""
         if task.state is TaskState.FAILED:
             style = "red bold"
-        elif task.state is TaskState.SUCCEED:
+        elif task.state is TaskState.PASSED:
             style = "green"
         return Text(task.state.name, style=style)
 

@@ -3,7 +3,7 @@ import datetime
 import enum
 import struct
 import typing
-from typing import Union, Optional, Protocol, ClassVar, Dict, Any, TypeVar
+from typing import Any, ClassVar, Dict, Optional, Protocol, TypeVar, Union
 
 from loguru import logger
 
@@ -42,20 +42,28 @@ def deserialize_by_type(raw: bytes, t: type[T]) -> Optional[T]:
         return None
 
     if t is bytes:
+        assert type(raw) is t
         return raw
     elif t is int:
         return struct.unpack("<q", raw)[0]
     elif t is str:
-        return raw.decode()
+        result = raw.decode()
+        assert type(result) is t
+        return result
     elif t is float:
         return struct.unpack("<d", raw)[0]
     elif t is bool:
         return struct.unpack("?", raw)[0]
     elif t is datetime.datetime:
-        return datetime.datetime.fromtimestamp(
-            deserialize_by_type(raw, float)
-        ).astimezone(datetime.timezone.utc)
+        float_value = deserialize_by_type(raw, float)
+        assert isinstance(float_value, float)
+        result = datetime.datetime.fromtimestamp(float_value).astimezone(
+            datetime.timezone.utc
+        )
+        assert type(result) is t
+        return result
     elif hasattr(t, "mro") and enum.IntEnum in t.mro():
+        assert issubclass(t, enum.IntEnum)
         return t(deserialize_by_type(raw, int))
 
     raise TypeError(f"Unsupported type: {t}")
@@ -98,7 +106,7 @@ def deserialize(dc: type[DC], raw: Dict[bytes, bytes]) -> DC:
         if str_k not in dc_keys:
             logger.warning(f"Key {str_k} is not in data class {dc}")
         else:
-            deserialized[str_k] = deserialize_by_type(v, dc_keys[str_k])
+            deserialized[str_k] = deserialize_by_type(v, dc_keys[str_k])  # type: ignore
             dc_keys.pop(str_k, None)
 
     if len(dc_keys) > 0:

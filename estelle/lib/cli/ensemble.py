@@ -5,11 +5,9 @@ from rich.live import Live
 from rich.table import Table
 from rich.text import Text
 
-from ..record.base import (
-    EnsembleMissingError,
-    EnsembleStateInconsistentError,
-)
-from ..ensemble import Ensemble as EnsembleItem, EnsembleState
+from ..ensemble import Ensemble as EnsembleItem
+from ..ensemble import EnsembleState
+from ..record.base import EnsembleMissingError, EnsembleStateInconsistentError
 from ..utils import get_id_width, get_utc_datetime, render_datetime
 
 
@@ -81,7 +79,7 @@ def ensemble_table():
                 ),
             )
 
-    def append(ensemble: EnsembleItem) -> RenderableType:
+    def append(ensemble: EnsembleItem):
         table.add_row(
             ensemble.identity[: get_id_width()],
             ensemble.owner,
@@ -101,13 +99,14 @@ def report_error(ensemble_identity: str, ex: Exception):
     prefix = ("ERROR: ", "red bold")
     if isinstance(ex, EnsembleStateInconsistentError):
         assert ex.identity.startswith(ensemble_identity)
+        assert ex.actual is not None
         console.print(
             Text.assemble(
                 prefix,
                 ("Ensemble ", ""),
                 (ex.identity, "bold"),
                 (" expected state ", ""),
-                (ex.expected.name, "yellow"),
+                (str((item.name for item in ex.expected)), "yellow"),
                 (" but got ", ""),
                 (ex.actual.name, "red"),
             )

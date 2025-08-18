@@ -1,6 +1,5 @@
 import dataclasses
 import uuid
-
 from typing import Union
 
 

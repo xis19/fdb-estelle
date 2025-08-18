@@ -2,7 +2,6 @@ import dataclasses
 import datetime
 import enum
 import uuid
-
 from typing import Optional
 
 from .utils import get_utc_datetime
@@ -41,9 +40,10 @@ class Ensemble:
     timeout: Optional[int]
     time_used: int
     max_fails: Optional[int]
-    num_running: Optional[int] = None
-    num_passed: Optional[int] = None
-    num_failed: Optional[int] = None
+    num_running: int = 0
+    num_passed: int = 0
+    num_failed: int = 0
+    num_timedout: int = 0
 
     @staticmethod
     def new(

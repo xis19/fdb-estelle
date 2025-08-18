@@ -2,13 +2,12 @@ import dataclasses
 import datetime
 import enum
 import uuid
-
 from typing import Optional
 
 
 class TaskState(enum.IntEnum):
     RUNNING = 1
-    SUCCEED = 2
+    PASSED = 2
     FAILED = 3
     TIMEDOUT = 4
 
@@ -34,5 +33,5 @@ class Task:
             state=TaskState.RUNNING,
             args=args,
             return_value=None,
-            execution_context_identity=None
+            execution_context_identity=None,
         )

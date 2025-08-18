@@ -1,7 +1,7 @@
 import click
 
-from .lib.config import load_config
 from .lib.agent.core import agent_core
+from .lib.config import load_config
 
 
 @click.group()

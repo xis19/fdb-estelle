@@ -1,25 +1,33 @@
 import datetime
 import enum
 import struct
-
 from types import NoneType
 from typing import (
-    Dict,
     Any,
+    Callable,
     ClassVar,
+    Dict,
+    Generator,
+    List,
     Optional,
     Protocol,
+    Sequence,
+    Tuple,
     TypeVar,
     Union,
-    List,
-    Callable,
-    Sequence,
 )
 
 import fdb
-
 from loguru import logger
 
+from ..agent import Agent as AgentItem
+from ..context import Context as ContextItem
+from ..ensemble import Ensemble as EnsembleItem
+from ..ensemble import EnsembleState
+from ..serde_bytes import deserialize, deserialize_by_type, serialize, serialize_by_type
+from ..task import Task as TaskItem
+from ..task import TaskState
+from ..utils import get_utc_datetime
 from .base import (
     AgentBase,
     ContextBase,
@@ -27,16 +35,10 @@ from .base import (
     EnsembleMissingError,
     EnsembleNotRunnableError,
     EnsembleStateInconsistentError,
-    TaskBase,
     RecordBase,
+    TaskBase,
     kwargs_verify,
 )
-from ..serde_bytes import serialize, deserialize, serialize_by_type, deserialize_by_type
-from ..ensemble import Ensemble as EnsembleItem, EnsembleState
-from ..context import Context as ContextItem
-from ..agent import Agent as AgentItem
-from ..task import Task as TaskItem, TaskState
-from ..utils import get_utc_datetime
 
 fdb.api_version(710)
 
@@ -300,48 +302,61 @@ class Context(ContextBase, _PathMixin):
         )
 
 
-class Task(TaskBase):
+def _taskstate_to_bytes(ts: TaskState) -> bytes:
+    return ts.name.lower().encode()
 
-    def _num_total_transactional(self) -> int:
-        return (
-            self._tr[self._counter_path[b"passed"]]
-            + self._tr[self._counter_path[b"failed"]]
-            + self._tr[self._counter_path[b"running"]]
-        )
+
+def _taskstate_to_str(ts: TaskState) -> str:
+    return ts.name.lower()
+
+
+class Task(TaskBase):
 
     def __init__(self, ensemble_identity: str, tr, top_path, retire_path):
         super().__init__(ensemble_identity)
 
         self._tr = tr
-        self._data_path = top_path.create_or_open(_db, "task").create_or_open(
-            _db, ensemble_identity
+        self._data_path = top_path.create_or_open(self._tr, "task").create_or_open(
+            self._tr, ensemble_identity
         )
-        self._counter_path = top_path.create_or_open(_db, "counter").create_or_open(
-            _db, ensemble_identity
+        self._counter_path = top_path.create_or_open(
+            self._tr, "counter"
+        ).create_or_open(self._tr, ensemble_identity)
+        self._retire_data_path = retire_path.create_or_open(self._tr, "task")
+        self._retire_counter_path = retire_path.create_or_open(self._tr, "counter")
+
+    def _get_task_count_by_state(self, state: str):
+        return (
+            deserialize_by_type(
+                self._tr[self._counter_path[state.encode()]].value or b"", int
+            )
+            or 0
         )
-        self._retire_data_path = retire_path.create_or_open(_db, "task")
-        self._retire_counter_path = retire_path.create_or_open(_db, "counter")
 
     def num_passed(self) -> int:
-        return self._tr[self._counter_path[b"passed"]]
+        return self._get_task_count_by_state(_taskstate_to_str(TaskState.PASSED))
 
     def num_failed(self) -> int:
-        return self._tr[self._counter_path[b"failed"]]
+        return self._get_task_count_by_state(_taskstate_to_str(TaskState.FAILED))
 
     def num_running(self) -> int:
-        return self._tr[self._counter_path[b"running"]]
+        return self._get_task_count_by_state(_taskstate_to_str(TaskState.RUNNING))
 
-    def num_total(self) -> int:
-        return self._num_total_transactional()
+    def num_timedout(self) -> int:
+        return self._get_task_count_by_state(_taskstate_to_str(TaskState.TIMEDOUT))
 
     def _new_task(self, task: TaskItem):
         _upsert(
             self._tr,
-            self._data_path.create_or_open(self._tr, "running"),
+            self._data_path.create_or_open(
+                self._tr, _taskstate_to_str(TaskState.RUNNING)
+            ),
             task,
             UpsertType.INSERT,
         )
-        _increase_counter(self._tr, self._counter_path, b"running")
+        _increase_counter(
+            self._tr, self._counter_path, _taskstate_to_bytes(TaskState.RUNNING)
+        )
 
     def _set_task_result(
         self,
@@ -350,28 +365,33 @@ class Task(TaskBase):
         execution_context_identity: Optional[str] = None,
     ):
         if return_value == 0:
-            result = b"passed"
-            return_state = TaskState.SUCCEED
+            return_state = TaskState.PASSED
         elif return_value is None:
-            result = b"timedout"
             return_state = TaskState.TIMEDOUT
         else:
-            result = b"failed"
             return_state = TaskState.FAILED
+        result = return_state.name.lower().encode()
         _update_counter(self._tr, self._counter_path, result, _FDB_1P)
-        _update_counter(self._tr, self._counter_path, b"running", _FDB_1M)
+        _update_counter(
+            self._tr,
+            self._counter_path,
+            TaskState.RUNNING.name.lower().encode(),
+            _FDB_1M,
+        )
 
-        task_path = self._data_path.open(self._tr, "running").open(self._tr, identity)
-        task_path[b"state"] = serialize_by_type(return_state)
-        task_path[b"execution_context_identity"] = serialize_by_type(
+        task_path = self._data_path.open(
+            self._tr, _taskstate_to_str(TaskState.RUNNING)
+        ).open(self._tr, identity)
+        self._tr[task_path[b"state"]] = serialize_by_type(return_state)
+        self._tr[task_path[b"execution_context_identity"]] = serialize_by_type(
             execution_context_identity
         )
-        task_path[b"terminate_time"] = serialize_by_type(get_utc_datetime())
-        task_path[b"return_value"] = serialize_by_type(return_value)
+        self._tr[task_path[b"terminate_time"]] = serialize_by_type(get_utc_datetime())
+        self._tr[task_path[b"return_value"]] = serialize_by_type(return_value)
 
         fdb.directory.move(  # type: ignore
             self._tr,
-            self._data_path.open(self._tr, "running")
+            self._data_path.open(self._tr, _taskstate_to_str(TaskState.RUNNING))
             .open(self._tr, identity)
             .get_path(),
             self._data_path.create_or_open(self._tr, result.decode()).get_path()
@@ -396,6 +416,27 @@ class Task(TaskBase):
             + (self._ensemble_identity,),
         )
 
+    def _get(self, task_identity: str) -> Optional[TaskItem]:
+        for key in (state.name.lower() for state in TaskState):
+            if (d := self._data_path.create_or_open(self._tr, key)).exists(
+                self._tr, task_identity
+            ):
+                return _get(self._tr, d, task_identity, TaskItem)
+        else:
+            return None
+
+    def _list_by_taskstate(self, task_state: TaskState):
+        p = task_state.name.lower()
+        if not self._data_path.exists(self._tr, p):
+            return []
+        task_path = self._data_path.open(self._tr, p)
+
+        result = []
+        for task_identity in task_path.list(self._tr):
+            result.append(_get(self._tr, task_path, task_identity, TaskItem))
+
+        return result
+
 
 class Ensemble(EnsembleBase, _PathMixin):
 
@@ -406,9 +447,8 @@ class Ensemble(EnsembleBase, _PathMixin):
     ) -> str:
         if not data_path.exists(tr, ensemble_identity):
             raise EnsembleMissingError(ensemble_identity)
-        if tr[data_path[ensemble_identity][b"state"]] != serialize_by_type(
-            EnsembleState.RUNNABLE
-        ):
+        ensemble_path = data_path.open(tr, ensemble_identity)
+        if tr[ensemble_path[b"state"]] != serialize_by_type(EnsembleState.RUNNABLE):
             raise EnsembleNotRunnableError(ensemble_identity)
 
         task_obj = Task(ensemble_identity, tr, top_path, retire_path)
@@ -527,16 +567,17 @@ class Ensemble(EnsembleBase, _PathMixin):
     @staticmethod
     @fdb.transactional
     def _get_transactional(
-        tr, data_path, retire_path, identity: str
+        tr, ensemble_data_path, top_path, retire_path, identity: str
     ) -> Optional[EnsembleItem]:
-        result = _get(tr, data_path, identity, EnsembleItem)
+        result = _get(tr, ensemble_data_path, identity, EnsembleItem)
         if result is None:
             return None
 
-        task_info = Task(identity, tr, data_path, retire_path)
+        task_info = Task(identity, tr, top_path, retire_path)
         result.num_failed = task_info.num_failed()
         result.num_passed = task_info.num_passed()
         result.num_running = task_info.num_running()
+        result.num_timedout = task_info.num_timedout()
 
         return result
 
@@ -545,6 +586,38 @@ class Ensemble(EnsembleBase, _PathMixin):
     def _insert_transactional(tr, data_path, counter_path, item: EnsembleItem):
         _upsert(tr, data_path, item, UpsertType.INSERT)
         _increase_counter(tr, counter_path, b"ensemble")
+
+    @staticmethod
+    @fdb.transactional
+    def _get_task_transactional(
+        tr,
+        data_path,
+        top_path,
+        retire_path,
+        ensemble_identity: str,
+        task_identity: str,
+    ):
+        if not data_path.exists(tr, ensemble_identity):
+            raise EnsembleMissingError(ensemble_identity)
+        return Task(ensemble_identity, tr, top_path, retire_path).get(task_identity)
+
+    @staticmethod
+    @fdb.transactional
+    def _iterate_by_taskstate_transactional(
+        tr,
+        top_path,
+        retire_path,
+        ensemble_identity: str,
+        task_states: Tuple[TaskState],
+    ) -> List[TaskItem]:
+        task_obj = Task(ensemble_identity, tr, top_path, retire_path)
+
+        result = []
+        for state in task_states:
+            for item in task_obj.list_by_taskstate(state):
+                result.append(item)
+
+        return result
 
     def __init__(self, top_path, retire_path):
         super().__init__()
@@ -573,13 +646,38 @@ class Ensemble(EnsembleBase, _PathMixin):
 
     def _get(self, identity: str) -> Optional[EnsembleItem]:
         return Ensemble._get_transactional(
-            _db, self._data_path, self._retire_path, identity
+            _db, self._data_path, self._top_path, self._retire_path, identity
         )
 
     def _retire(self, identity: str):
         return Ensemble._retire_transactional(
             _db, self._data_path, self._retire_path, self._top_path, identity
         )
+
+    def _get_task(
+        self, ensemble_identity: str, task_identity: str
+    ) -> Optional[TaskItem]:
+        return Ensemble._get_task_transactional(
+            _db,
+            self._data_path,
+            self._top_path,
+            self._retire_path,
+            ensemble_identity,
+            task_identity,
+        )
+
+    def _iterate_tasks(
+        self, ensemble_identity: str, task_state: Optional[TaskState] = None
+    ) -> Generator[TaskItem, None, None]:
+        if task_state is None:
+            task_states = (state for state in TaskState)
+        else:
+            task_states = (task_state,)
+
+        for item in Ensemble._iterate_by_taskstate_transactional(
+            _db, self._top_path, self._retire_path, ensemble_identity, task_states
+        ):  # type: ignore
+            yield item
 
     @staticmethod
     def _filter_func(
@@ -625,10 +723,10 @@ class Ensemble(EnsembleBase, _PathMixin):
         return Ensemble._add_task_transactional(
             _db,
             ensemble_identity,
-            self._data_path,
-            self._top_path,
-            self._retire_path,
-            args,
+            data_path=self._data_path,
+            top_path=self._top_path,
+            retire_path=self._retire_path,
+            args=args,
         )
 
     def _set_ensemble_task_result(
@@ -660,11 +758,9 @@ class Agent(AgentBase, _PathMixin):
 
     @staticmethod
     @fdb.transactional
-    def _heartbeat_transactional(tr, data_path, identity: str):
-        item = _get(tr, data_path, identity, AgentItem)
-        assert item is not None
-        item.heartbeat = datetime.datetime.now(datetime.timezone.utc)
-        _upsert(tr, data_path, item, UpsertType.UPSERT)
+    def _heartbeat_transactional(tr, data_path, agent_item: AgentItem):
+        agent_item.heartbeat = datetime.datetime.now(datetime.timezone.utc)
+        _upsert(tr, data_path, agent_item, UpsertType.UPSERT)
 
     @staticmethod
     @fdb.transactional
@@ -703,5 +799,5 @@ class Agent(AgentBase, _PathMixin):
             identity,
         )
 
-    def _heartbeat(self, identity: str):
-        Agent._heartbeat_transactional(_db, self._data_path, identity)
+    def _heartbeat(self, agent_item: AgentItem):
+        Agent._heartbeat_transactional(_db, self._data_path, agent_item)

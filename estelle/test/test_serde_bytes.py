@@ -2,15 +2,14 @@ import datetime
 import enum
 
 import pytest
-
 from loguru import logger
 
 from ..lib.ensemble import Ensemble, EnsembleState
 from ..lib.serde_bytes import (
-    serialize,
     deserialize,
-    serialize_by_type,
     deserialize_by_type,
+    serialize,
+    serialize_by_type,
 )
 
 

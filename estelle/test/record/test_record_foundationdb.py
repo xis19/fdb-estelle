@@ -1,20 +1,21 @@
+import random
+import time
+import uuid
+from typing import Any, Callable, ClassVar, Dict, Generic, Protocol, TypeVar
+
 import pytest
 
-import uuid
-import time
-from typing import Any, TypeVar, Protocol, Dict, ClassVar, Callable, Generic
-
+from ...lib.agent import Agent
 from ...lib.config import config
+from ...lib.context import Context
+from ...lib.ensemble import Ensemble, EnsembleState
 from ...lib.record import Record
 from ...lib.record.base import (
     EnsembleMissingError,
     EnsembleNotRunnableError,
     EnsembleStateInconsistentError,
 )
-from ...lib.context import Context
-from ...lib.ensemble import Ensemble, EnsembleState
 from ...lib.task import Task
-from ...lib.agent import Agent
 
 
 class _ItemProtocol(Protocol):
@@ -25,8 +26,8 @@ class _ItemProtocol(Protocol):
 T = TypeVar("T", bound=_ItemProtocol)
 
 
-from typing import Protocol
 from dataclasses import dataclass
+from typing import Protocol
 
 
 @pytest.fixture
@@ -109,12 +110,12 @@ def test_context(record):
 class _AgentCRUDTest(_CRUDTestBase[Agent]):
 
     def verify_heartbeat(self):
-        key = list(self._items.keys())[0]
-        self._record_term.heartbeat(key)
-        heartbeat_1 = self._record_term.get(key).heartbeat
+        agent_item = list(self._items.values())[0]
+        self._record_term.heartbeat(agent_item)
+        heartbeat_1 = self._record_term.get(agent_item.identity).heartbeat
         time.sleep(2)
-        self._record_term.heartbeat(key)
-        heartbeat_2 = self._record_term.get(key).heartbeat
+        self._record_term.heartbeat(agent_item)
+        heartbeat_2 = self._record_term.get(agent_item.identity).heartbeat
         assert heartbeat_2 > heartbeat_1
 
     def run_tests(self):
@@ -136,13 +137,13 @@ class _EnsembleCRUDTest:
         self._num_ensembles = num_ensembles
         self._num_tasks = num_tasks
         self._ensembles: Dict[str, Ensemble] = dict()
-        self._tasks: Dict[str, str] = dict()
+        self._ensemble_tasks: Dict[str, Dict[str, str]] = dict()
 
     def create_ensembles(self):
         for index in range(self._num_ensembles):
             ensemble = Ensemble.new(
                 owner=f"owner{index}",
-                total_runs=10,
+                total_runs=20,
                 context_identity=f"context{index}",
                 executable=f"executable{index}",
                 timeout=1800,
@@ -181,6 +182,45 @@ class _EnsembleCRUDTest:
         with pytest.raises(EnsembleStateInconsistentError):
             self._record_term.ensemble.kill(ensemble_identity)
 
+    def ensemble_task_handler(self):
+        _random = random.Random()
+        while True:
+            num_terminated_ensemble = 0
+            runnable = []
+            for ensemble_item in self._record_term.ensemble.iterate():
+                assert ensemble_item is not None
+                if ensemble_item.state is not EnsembleState.RUNNABLE:
+                    num_terminated_ensemble += 1
+                else:
+                    runnable.append(ensemble_item.identity)
+            if num_terminated_ensemble == self._num_ensembles:
+                break
+
+            ensemble_identity = _random.choice(runnable)
+            ensemble_item = self._record_term.ensemble.get(ensemble_identity)
+            assert ensemble_item is not None
+            task_identity = self._record_term.ensemble.add_ensemble_task(
+                ensemble_identity, args="test-args"
+            )
+            ensemble_item1 = self._record_term.ensemble.get(ensemble_identity)
+            assert ensemble_item1 is not None
+            assert ensemble_item1.num_running == ensemble_item.num_running + 1
+
+            result = random.choice([0, 0, 0, 0, 0, 0, 1, None])
+            self._record_term.ensemble.set_ensemble_task_result(
+                ensemble_identity, task_identity, result
+            )
+            ensemble_item2 = self._record_term.ensemble.get(ensemble_identity)
+            assert ensemble_item2 is not None
+            assert ensemble_item2.num_running == ensemble_item.num_running
+            match result:
+                case 0:
+                    assert ensemble_item2.num_passed == ensemble_item.num_passed + 1
+                case 1:
+                    assert ensemble_item2.num_failed == ensemble_item.num_failed + 1
+                case None:
+                    assert ensemble_item2.num_timedout == ensemble_item.num_timedout + 1
+
 
 @pytest.mark.skipif(
     config.record.backend_type != "foundationdb", reason="Only for FoundationDB backend"
@@ -189,3 +229,4 @@ def test_ensemble_task(record):
     tester = _EnsembleCRUDTest(record, 10, 20)
     tester.create_ensembles()
     tester.ensemble_state_change_test()
+    tester.ensemble_task_handler()

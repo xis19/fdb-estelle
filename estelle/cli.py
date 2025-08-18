@@ -1,11 +1,9 @@
 import getpass
 import pathlib
 import sys
-
 from typing import List, Optional
 
 import typer
-
 from loguru import logger
 from typing_extensions import Annotated
 
@@ -64,7 +62,7 @@ def start(
 ):
     from estelle.lib.model import create_ensemble
 
-    create_ensemble(test_package, user, priority, timeout, runs, fail_fast, tag)
+    create_ensemble(test_package, user, timeout, runs, fail_fast, tag)
 
 
 @_cli.command()
@@ -130,16 +128,7 @@ _TASK_STATE_DESCRIPTIONS = "\n\n".join(
 )
 
 
-@_cli.command()
-def inspect(
-    ensemble_identity: Annotated[str, typer.Argument(help="Inspect an ensemble")],
-):
-    from estelle.lib.model import inspect_ensemble
-
-    inspect_ensemble(ensemble_identity)
-
-
-@_list.command(name="ensemble")
+@_list.command(name="ensembles")
 def list_ensemble(
     state: Annotated[
         Optional[List[int]],
@@ -198,6 +187,19 @@ If not present, show only failed tasks.
     from estelle.lib.model import list_task
 
 
+@_list.command(name="agents")
+def list_agents():
+    from estelle.lib.agent import is_stale
+    from estelle.lib.cli.agent import agent_table
+    from estelle.lib.model import list_agent
+
+    with agent_table() as table_row_appender:
+        for agent_item in list_agent():
+            if not all and is_stale(agent_item):
+                continue
+            table_row_appender(agent_item)
+
+
 @_ensemble_failures.command()
 def list(ensemble_id: Annotated[str, typer.Argument(help="Ensemble ID")]):
     """List all test failures in the given ensemble"""
@@ -216,19 +218,6 @@ def kill(
             kill_ensemble(identity)
         except Exception as ex:
             report_error(identity, ex)
-
-
-@_cli.command()
-def agents(all: Annotated[bool, typer.Option(help="List all agents")] = False):
-    from estelle.lib.agent import is_stale
-    from estelle.lib.cli.agent import agent_table
-    from estelle.lib.model import list_agent
-
-    with agent_table() as table_row_appender:
-        for agent_item in list_agent():
-            if not all and is_stale(agent_item):
-                continue
-            table_row_appender(agent_item)
 
 
 if __name__ == "__main__":

@@ -4,8 +4,7 @@ import threading
 from loguru import logger
 
 from .heartbeat import heartbeat
-from .loader import task_loader
-from .runner import task_runner
+from .worker import worker
 
 
 def agent_core():
@@ -17,19 +16,13 @@ def agent_core():
     heartbeat_thread.start()
     logger.info("Heartbeat thread started")
 
-    task_load_thread = threading.Thread(
-        target=task_loader, args=tuple(), daemon=True, name="loader"
+    work_thread = threading.Thread(
+        target=worker, args=tuple(), daemon=True, name="loader"
     )
-    task_load_thread.start()
+    work_thread.start()
     logger.info("Task load thread started")
 
-    task_runner_thread = threading.Thread(
-        target=task_runner, args=tuple(), daemon=True, name="runner"
-    )
-    task_runner_thread.start()
-    logger.info("Task runner thread started")
-
-    threads = (heartbeat_thread, task_load_thread, task_runner_thread)
+    threads = (heartbeat_thread, work_thread)
 
     alive = True
     while alive:
