@@ -54,15 +54,14 @@ class Ensemble:
         timeout: Optional[int],
         max_fails: Optional[int],
     ) -> "Ensemble":
-        _now = datetime.datetime.now(datetime.timezone.utc)
         return Ensemble(
             identity=uuid.uuid4().hex,
             owner=owner,
-            create_time=_now,
+            create_time=get_utc_datetime(),
             start_time=None,
             terminate_time=None,
             state=EnsembleState.RUNNABLE,
-            state_last_modified_time=_now,
+            state_last_modified_time=get_utc_datetime(),
             total_runs=total_runs,
             context_identity=context_identity,
             executable=executable,

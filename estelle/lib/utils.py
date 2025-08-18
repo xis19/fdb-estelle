@@ -31,8 +31,8 @@ def get_utc_datetime() -> datetime.datetime:
 def render_datetime(utc_datetime: Optional[datetime.datetime]) -> RenderableType:
     """Renders a date time object to RenderableType"""
     if utc_datetime is not None:
-        Text(to_local_timezone(utc_datetime).strftime("%Y/%m/%d %H:%M:%S"))
-    return ""
+        return Text(to_local_timezone(utc_datetime).strftime("%Y/%m/%d %H:%M:%S"))
+    return "-"
 
 
 __ID_WIDTH: int = 32

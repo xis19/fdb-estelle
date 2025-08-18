@@ -27,7 +27,7 @@ def task_table(ensemble_id: str):
             style = "green"
         return Text(task.state.name, style=style)
 
-    def append(task: TaskItem) -> RenderableType:
+    def append(task: TaskItem):
         terminate_time = ""
         if task.terminate_time is not None:
             terminate_time = render_datetime(task.terminate_time)

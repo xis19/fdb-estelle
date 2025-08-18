@@ -145,7 +145,7 @@ If not present, show all ensembles.
 """,
         ),
     ] = None,
-    user: Annotated[
+    owner: Annotated[
         Optional[str],
         typer.Option(
             prompt_required=False, help=f"User name, default to {CURRENT_USER_NAME}"
@@ -155,36 +155,14 @@ If not present, show all ensembles.
     from estelle.lib.cli.ensemble import ensemble_table
     from estelle.lib.model import list_ensemble
 
-    state_ = None
     if state is not None:
         state_ = [EnsembleState(s) for s in state]
+    else:
+        state_ = None
 
     with ensemble_table() as table_row_appender:
-        for ensemble_item in list_ensemble(state_, user):
+        for ensemble_item in list_ensemble(state=state_, owner=owner):
             table_row_appender(ensemble_item)
-
-
-@_list.command(name="task")
-def list_task(
-    ensemble_identity: Annotated[str, typer.Argument(help="Ensemble ID")],
-    state_: Annotated[
-        Optional[List[int]],
-        typer.Option(
-            prompt_required=False,
-            help=f"""
-State of the task in integer:
-
-
-{_TASK_STATE_DESCRIPTIONS}
-
-
-If not present, show only failed tasks.
-""",
-        ),
-    ] = None,
-):
-    from estelle.lib.cli.task import task_table
-    from estelle.lib.model import list_task
 
 
 @_list.command(name="agents")

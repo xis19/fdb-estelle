@@ -84,13 +84,12 @@ def create_ensemble(
 
 def list_ensemble(
     state: Optional[Union[EnsembleState, Sequence[EnsembleState]]] = None,
-    user: Optional[str] = None,
+    owner: Optional[str] = None,
 ) -> Generator[Ensemble, None, None]:
     if isinstance(state, EnsembleState):
         state = (state,)
-    states = tuple(e for e in (state or EnsembleState))
 
-    for item in record.ensemble.iterate(owner=user, state=states):
+    for item in record.ensemble.iterate(owner=owner, state=state):
         yield item
 
 

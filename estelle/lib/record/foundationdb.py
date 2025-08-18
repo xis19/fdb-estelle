@@ -325,25 +325,23 @@ class Task(TaskBase):
         self._retire_data_path = retire_path.create_or_open(self._tr, "task")
         self._retire_counter_path = retire_path.create_or_open(self._tr, "counter")
 
-    def _get_task_count_by_state(self, state: str):
+    def _get_task_count_by_state(self, state: bytes):
         return (
-            deserialize_by_type(
-                self._tr[self._counter_path[state.encode()]].value or b"", int
-            )
+            deserialize_by_type(self._tr[self._counter_path[state]].value or b"", int)
             or 0
         )
 
     def num_passed(self) -> int:
-        return self._get_task_count_by_state(_taskstate_to_str(TaskState.PASSED))
+        return self._get_task_count_by_state(_taskstate_to_bytes(TaskState.PASSED))
 
     def num_failed(self) -> int:
-        return self._get_task_count_by_state(_taskstate_to_str(TaskState.FAILED))
+        return self._get_task_count_by_state(_taskstate_to_bytes(TaskState.FAILED))
 
     def num_running(self) -> int:
-        return self._get_task_count_by_state(_taskstate_to_str(TaskState.RUNNING))
+        return self._get_task_count_by_state(_taskstate_to_bytes(TaskState.RUNNING))
 
     def num_timedout(self) -> int:
-        return self._get_task_count_by_state(_taskstate_to_str(TaskState.TIMEDOUT))
+        return self._get_task_count_by_state(_taskstate_to_bytes(TaskState.TIMEDOUT))
 
     def _new_task(self, task: TaskItem):
         _upsert(
@@ -583,6 +581,50 @@ class Ensemble(EnsembleBase, _PathMixin):
 
     @staticmethod
     @fdb.transactional
+    def _scan_transactional(
+        tr,
+        ensemble_data_path,
+        top_path,
+        retire_path,
+        state: Optional[Tuple[EnsembleState]],
+        owner: Optional[str] = None,
+    ) -> List[EnsembleItem]:
+        if state is None:
+            serialized_state = tuple()
+        else:
+            serialized_state = (serialize_by_type(i) for i in state)
+        serialized_owner = serialize_by_type(owner)
+
+        result = []
+        for ensemble_identity in ensemble_data_path.list(tr):
+            ensemble_path = ensemble_data_path.open(tr, ensemble_identity)
+            if (
+                state is not None
+                and tr[ensemble_path[b"state"]].value not in serialized_state
+            ):
+                continue
+            if (
+                owner is not None
+                and tr[ensemble_path[b"owner"]].value != serialized_owner
+            ):
+                continue
+
+            ensemble_item = _get(
+                tr, ensemble_data_path, ensemble_identity, EnsembleItem
+            )
+            assert ensemble_item is not None
+            task_obj = Task(ensemble_identity, tr, top_path, retire_path)
+            ensemble_item.num_passed = task_obj.num_passed()
+            ensemble_item.num_failed = task_obj.num_failed()
+            ensemble_item.num_running = task_obj.num_running()
+            ensemble_item.num_timedout = task_obj.num_timedout()
+
+            result.append(ensemble_item)
+
+        return result
+
+    @staticmethod
+    @fdb.transactional
     def _insert_transactional(tr, data_path, counter_path, item: EnsembleItem):
         _upsert(tr, data_path, item, UpsertType.INSERT)
         _increase_counter(tr, counter_path, b"ensemble")
@@ -698,25 +740,20 @@ class Ensemble(EnsembleBase, _PathMixin):
 
     def _count(self, **kwargs) -> int:
         kwargs_verify(("state", "owner"), kwargs)
-        return _count(
-            _db,
-            self._data_path,
-            EnsembleItem,
-            lambda t: Ensemble._filter_func(
-                t, kwargs.get("state"), kwargs.get("owner")
-            ),
-        )
+        return len(list(self._iterate(**kwargs)))
 
     def _iterate(self, **kwargs):
         kwargs_verify(("state", "owner"), kwargs)
-        for item in _filter(
+        scan = Ensemble._scan_transactional(
             _db,
             self._data_path,
-            EnsembleItem,
-            lambda t: Ensemble._filter_func(
-                t, kwargs.get("state"), kwargs.get("owner")
-            ),
-        ):
+            self._top_path,
+            self._retire_path,
+            owner=kwargs.get("owner"),
+            state=kwargs.get("state"),
+        )
+
+        for item in scan:  # type: ignore
             yield item
 
     def _add_ensemble_task(self, ensemble_identity: str, args: str | NoneType) -> str:
