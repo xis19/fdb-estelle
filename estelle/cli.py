@@ -13,15 +13,16 @@ from estelle.lib.task import TaskState
 
 _cli = typer.Typer()
 _list = typer.Typer()
-_ensemble_failures = typer.Typer()
-_cli.add_typer(_list, name="list")
+_get = typer.Typer()
+_cli.add_typer(_list, name="list", help="Lists simulation related objects")
+_cli.add_typer(_get, name="get", help="Get objects")
 
 CURRENT_USER_NAME = getpass.getuser()
 
 
 @_cli.command()
 def start(
-    test_package: Annotated[
+    package: Annotated[
         pathlib.Path,
         typer.Option(help="Package contains the test context, e.g. correctness.tar.gz"),
     ],
@@ -60,9 +61,21 @@ def start(
         ),
     ] = "",
 ):
+    """Starts an ensemble simulation"""
     from estelle.lib.model import create_ensemble
+    from estelle.lib.cli.context import context_download_progressbar
+    from rich.console import Console
 
-    create_ensemble(test_package, user, timeout, runs, fail_fast, tag)
+    package_path = pathlib.Path(package)
+    if not package_path.exists():
+        raise FileNotFoundError(package_path)
+    package_size = package_path.stat().st_size
+
+    with context_download_progressbar(package_size) as step:
+        ensemble_id = create_ensemble(
+            package, package_size, user, timeout, runs, fail_fast, tag, callback=step
+        )
+    Console().print(f"Created ensemble [green bold]{ensemble_id}")
 
 
 @_cli.command()
@@ -85,6 +98,7 @@ def mock_start(
         float, typer.Option(prompt_required=False, help=f"Fail rate")
     ] = 0.01,
 ):
+    """Creates an ensemble using test correctness package"""
     from estelle.lib.model import create_test_ensemble
 
     create_test_ensemble(
@@ -94,8 +108,9 @@ def mock_start(
 
 @_cli.command()
 def pause(
-    ensemble_identity: Annotated[List[str], typer.Argument(help="Pause an ensemble")],
+    ensemble_identity: Annotated[List[str], typer.Argument(help="Ensemble ID")],
 ):
+    """Pause an ensemble"""
     from estelle.lib.cli.ensemble import report_error
     from estelle.lib.model import pause_ensemble
 
@@ -108,8 +123,9 @@ def pause(
 
 @_cli.command()
 def resume(
-    ensemble_identity: Annotated[List[str], typer.Argument(help="Resume an ensemble")],
+    ensemble_identity: Annotated[List[str], typer.Argument(help="Ensemble ID")],
 ):
+    """Resumes an ensemble"""
     from estelle.lib.cli.ensemble import report_error
     from estelle.lib.model import resume_ensemble
 
@@ -152,6 +168,7 @@ If not present, show all ensembles.
         ),
     ] = CURRENT_USER_NAME,
 ):
+    """Lists recent ensembles"""
     from estelle.lib.cli.ensemble import ensemble_table
     from estelle.lib.model import list_ensemble
 
@@ -167,27 +184,60 @@ If not present, show all ensembles.
 
 @_list.command(name="agents")
 def list_agents():
+    """Lists recent agents"""
     from estelle.lib.agent import is_stale
     from estelle.lib.cli.agent import agent_table
     from estelle.lib.model import list_agent
 
     with agent_table() as table_row_appender:
         for agent_item in list_agent():
-            if not all and is_stale(agent_item):
+            if is_stale(agent_item):
                 continue
             table_row_appender(agent_item)
 
 
-@_ensemble_failures.command()
-def list(ensemble_id: Annotated[str, typer.Argument(help="Ensemble ID")]):
+@_list.command(name="failures")
+def list_failures(ensemble_id: Annotated[str, typer.Argument(help="Ensemble ID")]):
     """List all test failures in the given ensemble"""
-    pass
+    from estelle.lib.cli.task import task_table
+    from estelle.lib.model import list_task
+
+    with task_table(ensemble_id) as table_row_appender:
+        for state in (TaskState.FAILED, TaskState.TIMEDOUT):
+            for task_item in list_task(ensemble_identity=ensemble_id, state=state):
+                table_row_appender(task_item)
+
+
+@_get.command(name="context")
+def get_context(
+    context_id: Annotated[str, typer.Argument(help="Context ID")],
+    filename: Annotated[
+        str, typer.Option(help="Output file name (stdout not supported)")
+    ],
+):
+    """Download a given context"""
+    from estelle.lib.model import get_context_by_identity, get_context_data
+    from estelle.lib.cli.context import context_download_progressbar, report_error
+
+    context = get_context_by_identity(context_id)
+
+    try:
+        if context is None:
+            raise KeyError(f"Context {context_id} not found")
+        if context.size is None:
+            raise ValueError(f"Context {context_id} size unavailable")
+
+        with context_download_progressbar(context.size) as step:
+            get_context_data(context_id, filename, step)
+    except Exception as ex:
+        report_error(context_id, ex)
 
 
 @_cli.command()
 def kill(
     ensemble_identity: Annotated[List[str], typer.Argument(help="Kill an ensemble")],
 ):
+    """Kills an ensemble simulation"""
     from estelle.lib.cli.ensemble import report_error
     from estelle.lib.model import kill_ensemble
 

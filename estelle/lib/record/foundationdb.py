@@ -592,7 +592,7 @@ class Ensemble(EnsembleBase, _PathMixin):
         if state is None:
             serialized_state = tuple()
         else:
-            serialized_state = (serialize_by_type(i) for i in state)
+            serialized_state = [serialize_by_type(i) for i in state]
         serialized_owner = serialize_by_type(owner)
 
         result = []

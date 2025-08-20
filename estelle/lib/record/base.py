@@ -300,7 +300,6 @@ class EnsembleNotRunnableError(EnsembleStateInconsistentError):
     def __init__(self, identity: str, state: Optional[EnsembleState] = None):
         super().__init__(identity, EnsembleState.RUNNABLE, state)
 
-
 class RecordBase(abc.ABC):
 
     def __init__(self):

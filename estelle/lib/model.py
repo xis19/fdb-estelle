@@ -1,14 +1,15 @@
 import io
 import pathlib
 from typing import Generator, Optional, Sequence, Union
+from types import NoneType
 
 from loguru import logger
 
 from estelle.lib.context import Context
 from estelle.lib.ensemble import Ensemble, EnsembleState
 from estelle.lib.record import record
-from estelle.lib.storage import get_storage
-from estelle.lib.task import Task, TaskState
+from estelle.lib.storage import get_storage, CallbackType as StorageCallbackType
+from estelle.lib.task import TaskState
 
 assert record is not None
 
@@ -50,22 +51,19 @@ def create_test_ensemble(owner: str, runs: int, fail_fast: int, fail_rate: float
 
 
 def create_ensemble(
-    test_package: pathlib.Path,
+    package: Union[pathlib.Path, str],
+    package_size: int,
     user: str,
     timeout: int,
     runs: int,
     fail_fast: int,
     tag: str,
+    callback: Optional[StorageCallbackType] = None,
 ):
-    package_path = pathlib.Path(test_package)
-    if not package_path.exists():
-        raise FileNotFoundError(package_path)
-    package_size = package_path.stat().st_size
-
     context = Context.new(owner=user, size=package_size, checksum=None, tag=tag)
     storage = get_storage()
-    with open(package_path, "rb") as stream:
-        result = storage.upload(context, stream)
+    with open(package, "rb") as stream:
+        result = storage.upload(context, stream, callback=callback)
     context.checksum = result.checksum
     assert package_size == result.total_bytes
     record.context.insert(context)
@@ -80,6 +78,8 @@ def create_ensemble(
         max_fails=fail_fast,
     )
     record.ensemble.insert(ensemble)
+
+    return ensemble.identity
 
 
 def list_ensemble(
@@ -103,6 +103,19 @@ def list_task(
 
 def get_context_by_identity(identity: str) -> Optional[Context]:
     return record.context.get(identity)
+
+
+def get_context_data(
+    identity: str,
+    output_path: Union[str, pathlib.Path],
+    callback: Optional[StorageCallbackType] = None,
+) -> Optional[pathlib.Path]:
+    context = get_context_by_identity(identity)
+    if context is None:
+        raise KeyError(f"Context ID not found {identity}")
+
+    with open(output_path, mode="wb") as stream:
+        get_storage().download(context, stream, callback=callback)
 
 
 def inspect_ensemble(identity: str):

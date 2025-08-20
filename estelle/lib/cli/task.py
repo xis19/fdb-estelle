@@ -1,19 +1,18 @@
 import contextlib
 
-from rich.console import Console, RenderableType
 from rich.live import Live
 from rich.table import Table
 from rich.text import Text
 
 from ..task import Task as TaskItem
 from ..task import TaskState
-from ..utils import get_id_width, get_utc_datetime, render_datetime
+from ..utils import get_id_width, render_datetime
 
 
 @contextlib.contextmanager
 def task_table(ensemble_id: str):
     table = Table(title=f"Ensemble {ensemble_id}")
-    table.add_column("ID", width=get_id_width())
+    table.add_column("Task ID", width=get_id_width())
     table.add_column("Start Time", justify="left")
     table.add_column("Terminate Time", justify="left")
     table.add_column("Status", justify="left")
@@ -23,6 +22,8 @@ def task_table(ensemble_id: str):
         style = ""
         if task.state is TaskState.FAILED:
             style = "red bold"
+        elif task.state is TaskState.TIMEDOUT:
+            style = "red"
         elif task.state is TaskState.PASSED:
             style = "green"
         return Text(task.state.name, style=style)

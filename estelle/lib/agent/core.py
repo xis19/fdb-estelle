@@ -22,13 +22,5 @@ def agent_core():
     work_thread.start()
     logger.info("Task load thread started")
 
-    threads = (heartbeat_thread, work_thread)
-
-    alive = True
-    while alive:
-        for thread in threads:
-            if not thread.is_alive():
-                logger.info(f"Thread {thread.name} terminated")
-                alive = False
-
+    work_thread.join()
     logger.info("Agent quitting...")

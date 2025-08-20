@@ -1,7 +1,7 @@
 import opendal
 
 from ..config import config
-from .base import Storage
+from .base import Storage, CallbackType
 
 
 def get_storage() -> Storage:

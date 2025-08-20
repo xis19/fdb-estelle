@@ -24,8 +24,8 @@ def to_local_timezone(utc_datetime: datetime.datetime) -> datetime.datetime:
 
 
 def get_utc_datetime() -> datetime.datetime:
-    """Gets current UTC datetime with no timezone"""
-    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    """Gets current UTC datetime"""
+    return datetime.datetime.now(datetime.timezone.utc)
 
 
 def render_datetime(utc_datetime: Optional[datetime.datetime]) -> RenderableType:
