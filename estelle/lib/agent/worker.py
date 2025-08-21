@@ -1,6 +1,6 @@
 import abc
+import bz2
 import datetime
-import glob
 import io
 import json
 import os
@@ -143,9 +143,16 @@ def _prepare_context(context: Context, work_directory: pathlib.Path):
     decompress_thread.join()
 
 
+HARNESS_STDOUT = "harness_stdout"
+"""Stdout of joshua_teest"""
+
+HARNESS_STDERR = "harness_stderr"
+"""Stderr of joshua_test"""
+
+
 _INTERESTED_FILES = {
-    "harness_stdout",  # stdout of joshua_test
-    "harness_stderr",  # stderr of joshua_test
+    HARNESS_STDOUT,
+    HARNESS_STDERR,
     "fdbserver_stdout",  # stdout of fdbserver (stderr goes to joshua_test stderr)
 }
 
@@ -157,7 +164,6 @@ def _pack_execute_context(
     _ARCHIVE = "archive.tar"
 
     def _to_archive(path: pathlib.Path):
-        print(path.parent)
         subprocess.call(
             [
                 "tar",
@@ -245,10 +251,15 @@ class CorrectnessPackageExecutor(TaskExecutor):
         self._work_directory: Optional[tempfile.TemporaryDirectory] = None
         self._simulation_directory: Optional[pathlib.Path] = None
         self._execution_context_identity: Optional[str] = None
+        self._harness_stdout_bz2: Optional[bytes] = None
 
     @property
     def execution_context_identity(self) -> Optional[str]:
         return self._execution_context_identity
+
+    @property
+    def harness_stdout_bz2(self) -> Optional[bytes]:
+        return self._harness_stdout_bz2
 
     def _setup(self):
         self._work_directory = tempfile.TemporaryDirectory(prefix="estelle-")
@@ -273,8 +284,8 @@ class CorrectnessPackageExecutor(TaskExecutor):
         with chdir(self._work_directory.name):
             logger.info(f"Running test at {self._work_directory.name}")
             with (
-                open(self._simulation_directory / "harness_stdout", mode="w") as stdout,
-                open(self._simulation_directory / "harness_stderr", mode="w") as stderr,
+                open(self._simulation_directory / HARNESS_STDOUT, mode="w") as stdout,
+                open(self._simulation_directory / HARNESS_STDERR, mode="w") as stderr,
             ):
                 try:
                     test_exec = subprocess.Popen(
@@ -296,11 +307,13 @@ class CorrectnessPackageExecutor(TaskExecutor):
     def _teardown(self):
         assert self._work_directory is not None
         assert self._simulation_directory is not None
+        with open(self._simulation_directory / HARNESS_STDOUT, mode="rb") as stream:
+            self._harness_stdout_bz2 = bz2.compress(stream.read(), 9)
         execute_context = _upload_execute_context(
             self._task_identity, self._context, self._simulation_directory
         )
         self._execution_context_identity = execute_context.identity
-        # self._work_directory.cleanup()
+        self._work_directory.cleanup()
 
 
 def run_task():
@@ -339,6 +352,7 @@ def run_task():
         task_identity=task_identity,
         return_value=return_value,
         execution_context_identity=executor.execution_context_identity,
+        stdout=executor.harness_stdout_bz2,
     )
     logger.info(
         f"Ensemble {ensemble_identity} task {task_identity}: terminate {return_value}"
@@ -347,8 +361,6 @@ def run_task():
         agent_info.task_succeed()
     else:
         agent_info.tasks_failed()
-
-    os._exit(1)
 
 
 def worker():

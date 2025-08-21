@@ -22,6 +22,7 @@ class Task:
     args: str
     return_value: Optional[int]
     execution_context_identity: Optional[str]
+    stdout: str = ""
 
     @staticmethod
     def new(ensemble_identity: str, args: str) -> "Task":

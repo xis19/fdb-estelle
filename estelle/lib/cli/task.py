@@ -45,3 +45,6 @@ def task_table(ensemble_id: str):
 
     with Live(table, refresh_per_second=1):
         yield append
+
+def task_details_tabke(task: TaskItem):
+    pass

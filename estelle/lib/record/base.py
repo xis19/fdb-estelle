@@ -155,6 +155,7 @@ class TaskBase(abc.ABC):
         identity: str,
         return_value: Optional[int] = None,
         execution_context_identity: Optional[str] = None,
+        stdout: Optional[str | bytes] = None,
     ):
         raise NotImplementedError()
 
@@ -163,9 +164,12 @@ class TaskBase(abc.ABC):
         identity: str,
         return_value: Optional[int],
         execution_context_identity: Optional[str] = None,
+        stdout: Optional[bytes | str] = None,
     ) -> TaskState:
         """Set the result of the task"""
-        return self._set_task_result(identity, return_value, execution_context_identity)
+        return self._set_task_result(
+            identity, return_value, execution_context_identity, stdout
+        )
 
     @abc.abstractmethod
     def _retire(self):
@@ -237,6 +241,7 @@ class EnsembleBase(_BaseInterfaceMixin[Ensemble]):
         task_identity: str,
         return_value: Optional[int],
         execution_context_identity: Optional[str] = None,
+        stdout: Optional[bytes | str] = None,
     ):
         raise NotImplementedError()
 
@@ -246,9 +251,14 @@ class EnsembleBase(_BaseInterfaceMixin[Ensemble]):
         task_identity: str,
         return_value: Optional[int],
         execution_context_identity: Optional[str] = None,
+        stdout: Optional[bytes | str] = None,
     ):
         self._set_ensemble_task_result(
-            ensemble_identity, task_identity, return_value, execution_context_identity
+            ensemble_identity,
+            task_identity,
+            return_value,
+            execution_context_identity,
+            stdout,
         )
 
     def get_task(self, ensemble_identity: str, task_identity: str) -> Optional[Task]:
@@ -299,6 +309,7 @@ class EnsembleNotRunnableError(EnsembleStateInconsistentError):
 
     def __init__(self, identity: str, state: Optional[EnsembleState] = None):
         super().__init__(identity, EnsembleState.RUNNABLE, state)
+
 
 class RecordBase(abc.ABC):
 

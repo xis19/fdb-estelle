@@ -1,7 +1,6 @@
 import io
 import pathlib
 from typing import Generator, Optional, Sequence, Union
-from types import NoneType
 
 from loguru import logger
 
@@ -9,7 +8,7 @@ from estelle.lib.context import Context
 from estelle.lib.ensemble import Ensemble, EnsembleState
 from estelle.lib.record import record
 from estelle.lib.storage import get_storage, CallbackType as StorageCallbackType
-from estelle.lib.task import TaskState
+from estelle.lib.task import Task, TaskState
 
 assert record is not None
 
@@ -99,6 +98,9 @@ def list_task(
 ):
     for item in record.ensemble.iterate_tasks(ensemble_identity, state):
         yield item
+
+def get_ensemble_task(ensemble_identity: str, task_identity: str) -> Optional[Task]:
+    return record.ensemble.get_task(ensemble_identity, task_identity)
 
 
 def get_context_by_identity(identity: str) -> Optional[Context]:

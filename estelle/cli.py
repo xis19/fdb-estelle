@@ -233,6 +233,19 @@ def get_context(
         report_error(context_id, ex)
 
 
+@_get.command(name="task")
+def get_task(
+    ensemble_id: Annotated[str, typer.Argument(help="Ensemble ID")],
+    task_id: Annotated[str, typer.Argument(help="Task ID")],
+):
+    """Get the information of a given task"""
+    from estelle.lib.model import get_ensemble_task
+    from estelle.lib.cli.task import task_details_table
+
+    task = get_ensemble_task(ensemble_id, task_id)
+    task_details_table(task)
+
+
 @_cli.command()
 def kill(
     ensemble_identity: Annotated[List[str], typer.Argument(help="Kill an ensemble")],

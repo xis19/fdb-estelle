@@ -361,6 +361,7 @@ class Task(TaskBase):
         identity: str,
         return_value: Optional[int] = None,
         execution_context_identity: Optional[str] = None,
+        stdout: Optional[str | bytes] = None,
     ):
         if return_value == 0:
             return_state = TaskState.PASSED
@@ -386,6 +387,7 @@ class Task(TaskBase):
         )
         self._tr[task_path[b"terminate_time"]] = serialize_by_type(get_utc_datetime())
         self._tr[task_path[b"return_value"]] = serialize_by_type(return_value)
+        self._tr[task_path[b"stdout"]] = serialize_by_type(stdout)
 
         fdb.directory.move(  # type: ignore
             self._tr,
@@ -463,13 +465,14 @@ class Ensemble(EnsembleBase, _PathMixin):
         retire_path,
         return_value: Optional[int] = None,
         execution_context_identity: Optional[str] = None,
+        stdout: Optional[Union[str, bytes]] = None,
     ) -> EnsembleState:
         if not data_path.exists(tr, ensemble_identity):
             raise EnsembleMissingError(ensemble_identity)
 
         task_obj = Task(ensemble_identity, tr, top_path, retire_path)
         task_obj.set_task_result(
-            task_identity, return_value, execution_context_identity
+            task_identity, return_value, execution_context_identity, stdout
         )
 
         ensemble_item = _get(tr, data_path, ensemble_identity, EnsembleItem)
@@ -772,6 +775,7 @@ class Ensemble(EnsembleBase, _PathMixin):
         task_identity: str,
         return_value: int | NoneType,
         execution_context_identity: str | NoneType = None,
+        stdout: bytes | str | NoneType = None,
     ):
         return Ensemble._report_task_result_transactional(
             _db,
@@ -782,6 +786,7 @@ class Ensemble(EnsembleBase, _PathMixin):
             self._retire_path,
             return_value,
             execution_context_identity,
+            stdout,
         )
 
 
